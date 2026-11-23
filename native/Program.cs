@@ -18,6 +18,14 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
+// Shown in the exe's Properties > Details. Change the version here for each release (and tag it vX.Y in git).
+[assembly: AssemblyTitle("ASTROLABE")]
+[assembly: AssemblyProduct("ASTROLABE")]
+[assembly: AssemblyDescription("Brand colour to the value you type in any OCIO colour profile")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0")]
+
 static class Program
 {
     internal const string Title = "ASTROLABE";
