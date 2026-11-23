@@ -1,0 +1,19 @@
+# Build output: made by build.js and native/build_native.js, so not kept in git.
+# The exe goes on a GitHub Release instead.
+native/dist/
+desktop/dist/
+node_modules/
+srgb-aces-converter.html
+app/ASTROLABE.html
+desktop/app.html
+desktop/icon.ico
+
+# Where `node build.js --deploy` copies the app: local to this PC
+deploy-path.txt
+
+# Python and editor clutter
+__pycache__/
+*.pyc
+.vscode/
+Thumbs.db
+desktop.ini

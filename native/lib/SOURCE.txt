@@ -1,0 +1,1 @@
+Microsoft.Web.WebView2 1.0.4191.47 from nuget.org (2026-11-20). Core and WinForms from lib/net462, WebView2Loader from runtimes/win-x64/native. All three Authenticode-signed by Microsoft Corporation.

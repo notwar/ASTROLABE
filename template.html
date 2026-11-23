@@ -1,0 +1,1112 @@
+<title>ASTROLABE</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ASTROLABE. Layout: logo bar, then two panels (final result | value to type), either side editable. Grey only: the swatches carry the colour. */
+:root {
+  --bg: #ececec;
+  --surface: #f8f8f8;
+  --sunken: #efefef;
+  --fg: #1b1b1b;
+  --muted: #6e6e6e;
+  --faint: #a3a3a3;
+  --line: #dadada;
+  --note: #e4e4e4;
+  --grey18: #767676;
+  --font-ui: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151515; --surface: #1d1d1d; --sunken: #181818; --fg: #e9e9e9; --muted: #999999; --faint: #5f5f5f;
+    --line: #2d2d2d; --note: #262626;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151515; --surface: #1d1d1d; --sunken: #181818; --fg: #e9e9e9; --muted: #999999; --faint: #5f5f5f;
+  --line: #2d2d2d; --note: #262626;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 10.5px; line-height: 1.4;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 22px;
+}
+.wrap { max-width: 680px; margin: 0 auto; display: grid; gap: 16px; }
+select {
+  font: inherit; font-size: 10.5px; padding: 4px 24px 4px 8px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer;
+}
+
+/* logo bar */
+header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--fg); min-width: 0; }
+.brand svg { width: 20px; height: 20px; flex: none; }
+.brand span { font-size: 11px; font-weight: 600; letter-spacing: 0.22em; }
+
+/* hover help and tooltips */
+.tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tip { position: relative; }
+.tipBtn {
+  width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: transparent;
+  color: var(--muted); font: 600 11px/1 var(--font-ui); cursor: help; display: grid; place-items: center;
+}
+.tipBtn:hover, .tip:focus-within .tipBtn { color: var(--fg); border-color: var(--muted); }
+.tipBtn svg { width: 12px; height: 12px; }
+.tipPop { display: none; position: absolute; right: 0; top: 100%; padding-top: 6px; z-index: 20; width: min(380px, calc(100vw - 40px)); }
+.tip.narrow .tipPop { width: min(240px, calc(100vw - 40px)); }
+.tip:hover .tipPop, .tip:focus-within .tipPop { display: block; }
+.tipBody {
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); display: grid; gap: 7px; font-size: 10px; line-height: 1.5;
+  max-height: min(70vh, 480px); overflow: auto;
+}
+.tipBody p { margin: 0; }
+.tipBody .muted { color: var(--muted); }
+.tipBody code { font-family: var(--font-num); font-size: 9.5px; overflow-wrap: anywhere; }
+.steps { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.chain { font-family: var(--font-num); font-size: 9px; color: var(--muted); line-height: 1.6; }
+.chain b { color: var(--fg); font-weight: 500; }
+kbd { font-family: var(--font-num); font-size: 9px; border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; background: var(--sunken); }
+
+/* colour config: name in the bar, settings menu opened by click */
+.cfgName {
+  font: inherit; font-size: 9.5px; color: var(--muted); background: none; border: 0; padding: 3px 6px; border-radius: 5px;
+  cursor: pointer; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cfgName:hover { color: var(--fg); background: var(--sunken); }
+.tools { position: relative; }
+.tip.menu { position: static; } /* the menu hangs from the right edge of the bar, so it never runs off the left */
+.tip.menu:hover .tipPop, .tip.menu:focus-within .tipPop { display: none; }
+.tip.menu.open .tipPop { display: block; }
+.tip.menu .tipBtn { cursor: pointer; }
+.tip.menu.open .tipBtn { color: var(--fg); border-color: var(--muted); }
+.tip.menu .tipBody { gap: 2px; max-height: calc(100vh - 70px); }
+.menuTitle { font-size: 11px; font-weight: 600; margin-bottom: 2px !important; }
+.menuHead { font-size: 8.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-top: 8px !important; }
+.cfgRow {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 6px; align-items: baseline; width: 100%; text-align: left;
+  font: inherit; font-size: 10px; color: var(--fg); background: none; border: 0; border-radius: 6px; padding: 5px 6px; cursor: pointer;
+}
+.cfgRow:hover { background: var(--sunken); }
+.cfgRow .mark { font-size: 9px; visibility: hidden; }
+.cfgRow.on .mark { visibility: visible; }
+.cfgRow b { font-weight: 500; display: block; overflow-wrap: anywhere; }
+.cfgRow small { color: var(--muted); font-size: 9px; display: block; overflow-wrap: anywhere; }
+.cfgActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+  font: inherit; font-size: 10px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface);
+  color: var(--fg); cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.defTag {
+  font-size: 8px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: 1px;
+}
+.cfgDef {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px;
+  border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; color: var(--muted); font-size: 9.5px;
+}
+.link { font: inherit; font-size: 9.5px; color: var(--fg); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.link:hover { color: var(--muted); }
+.cfgStatus { color: var(--muted); font-size: 9.5px; margin-top: 6px !important; }
+.cfgStatus:empty { display: none; }
+
+/* panels */
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  display: grid; gap: 12px; align-content: start; min-width: 0;
+}
+.head { display: grid; gap: 8px; }
+.titleRow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.head h2 { font-size: 12.5px; font-weight: 600; margin: 0; }
+.role { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; color: var(--faint); }
+.role em { font-style: normal; color: var(--fg); }
+select.spaceSel { font-size: 11px; font-weight: 500; width: 100%; }
+.spaceNote { font-size: 9px; color: var(--muted); }
+
+/* swatches on a thin 18% grey surround, the way you'd judge a colour on set */
+.swatchFrame { background: var(--grey18); border-radius: 7px; padding: 5px; display: grid; position: relative; }
+.swatch { aspect-ratio: 16 / 7; max-width: 100%; border-radius: 4px; position: relative; overflow: hidden; display: block; }
+button.swatch { width: 100%; border: 0; padding: 0; font: inherit; }
+/* colour picker under the final swatch: colour square, hue, screen eyedropper, hex */
+.cpick {
+  position: absolute; left: 5px; right: 5px; top: calc(100% - 4px); z-index: 30; display: grid; gap: 10px; padding: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+.cpick[hidden] { display: none; }
+.cpSV { position: relative; height: 150px; border-radius: 5px; cursor: crosshair; touch-action: none; }
+.cpHue {
+  position: relative; flex: 1; height: 12px; border-radius: 6px; cursor: ew-resize; touch-action: none;
+  background: linear-gradient(to right, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00);
+}
+.cpKnob {
+  position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; pointer-events: none;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.4);
+}
+.cpHue .cpKnob { top: 50%; }
+.cpRow { display: flex; align-items: center; gap: 8px; }
+.cpDrop {
+  width: 28px; height: 28px; flex: none; padding: 0; border-radius: 6px; border: 1px solid var(--line); background: var(--sunken);
+  color: var(--fg); cursor: pointer; display: grid; place-items: center;
+}
+.cpDrop:hover { border-color: var(--muted); }
+.cpDrop svg { width: 14px; height: 14px; }
+.cpHex {
+  font-family: var(--font-num); font-size: 10px; width: 100%; min-width: 0; padding: 4px 6px;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg);
+}
+.cpHex.bad { border-color: var(--fg); border-style: dashed; }
+.cpDot { width: 22px; height: 22px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15); }
+.swatch.pick { cursor: pointer; }
+.swatch input[type=color] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
+.swatchLabel { position: absolute; right: 7px; bottom: 5px; font-size: 8.5px; color: rgb(255 255 255 / 0.85); font-family: var(--font-num); pointer-events: none; text-shadow: 0 0 3px rgb(0 0 0 / 0.35); }
+
+/* value rows */
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; align-items: center; gap: 6px; }
+.row .lab { font-size: 8.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.row.float { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.fields.one { grid-template-columns: minmax(0, 1fr); }
+input.v {
+  font-family: var(--font-num); font-size: 10px; font-variant-numeric: tabular-nums; width: 100%; min-width: 0;
+  padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg);
+}
+input.v.scrub:not(:focus) { cursor: ew-resize; }
+input.v:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
+.panel.isOut input.v:not(:focus) { background: var(--sunken); border-color: transparent; }
+input.v.bad { border-color: var(--fg); border-style: dashed; }
+input.v.na { color: var(--faint); }
+body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
+.copy {
+  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--faint);
+  cursor: pointer; display: grid; place-items: center;
+}
+.copy svg { width: 12px; height: 12px; }
+.copy:hover { color: var(--fg); background: var(--sunken); }
+.copy.done { color: var(--fg); }
+
+/* notes under the values: grey, told apart by their mark */
+.chip {
+  display: none; font-size: 9.5px; background: var(--note); color: var(--fg); border-radius: 6px; padding: 6px 8px 6px 24px;
+  position: relative; line-height: 1.45;
+}
+.chip::before {
+  content: "!"; position: absolute; left: 8px; top: 6px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--fg); color: var(--surface); font: 700 8px/11px var(--font-ui); text-align: center;
+}
+.chip.show { display: block; }
+.chip.ok { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.chip.ok::before { content: "✓"; background: transparent; color: var(--muted); border: 1px solid var(--muted); width: 9px; height: 9px; line-height: 9px; font-size: 7px; }
+.chip.info { color: var(--muted); }
+.chip.info::before { content: "i"; background: var(--muted); }
+/* warnings stand out: the chip turns inverted (still grey only) */
+.chip.warn { background: var(--fg); color: var(--surface); font-weight: 500; }
+.chip.warn::before { background: var(--surface); color: var(--fg); }
+.chip[hidden] { display: none; }
+/* the same marks inline in the help text, greyed */
+.mk {
+  display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; text-align: center;
+  font: 700 8px/11px var(--font-ui); background: var(--muted); color: var(--surface);
+}
+.mk.ok { background: transparent; color: var(--muted); border: 1px solid var(--muted); width: 9px; height: 9px; line-height: 9px; font-size: 7px; }
+
+@media (max-width: 560px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .cfgName { max-width: 120px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="9" r="4"/><path d="M32 13 V15"/><circle cx="32" cy="37" r="22"/><circle cx="32" cy="37" r="12"/><path d="M14 51 L50 23"/><path d="M17 45 L21 50 M43 24 L47 29"/></g><circle cx="32" cy="37" r="3.4" fill="currentColor"/></svg><span>ASTROLABE</span></div>
+    <div class="tools">
+      <button class="cfgName" id="cfgName" type="button" title="Colour config in use. Click to change it."></button>
+      <div class="tip menu" id="cfgTip">
+        <button class="tipBtn" id="cfgBtn" type="button" aria-label="Colour config" aria-haspopup="dialog" aria-expanded="false" title="Colour config">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+        <div class="tipPop" id="cfgPop" role="dialog" aria-label="Colour config"><div class="tipBody">
+          <p class="menuTitle">Colour config</p>
+          <p class="muted">The OCIO config your apps use. Its views and colour spaces fill the two dropdowns.</p>
+          <div id="cfgList"></div>
+          <div class="cfgDef" id="cfgDef"></div>
+          <div class="cfgActions">
+            <button class="btn" id="cfgLoad" type="button">Load config…</button>
+            <button class="btn" id="cfgFolderBtn" type="button" hidden>Pick its folder…</button>
+          </div>
+          <p class="cfgStatus" id="cfgStatus" role="status"></p>
+          <input type="file" id="cfgFile" accept=".ocio" hidden>
+          <input type="file" id="cfgFolder" webkitdirectory multiple hidden>
+        </div></div>
+      </div>
+      <div class="tip narrow" id="dragTip">
+        <button class="tipBtn" type="button" aria-label="How to drag values" aria-describedby="dragPop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>
+        </button>
+        <div class="tipPop" id="dragPop" role="tooltip"><div class="tipBody">
+          <p>Drag any number box left or right to change it.</p>
+          <p><kbd>Shift</kbd> 10× faster &nbsp; <kbd>Ctrl</kbd> 10× finer</p>
+          <p class="muted">Click a box to type in it. Works on both sides; the side you changed last drives the other.</p>
+        </div></div>
+      </div>
+      <div class="tip" id="helpTip">
+        <button class="tipBtn" type="button" aria-label="Help" aria-describedby="helpPop">?</button>
+        <div class="tipPop" id="helpPop" role="tooltip"><div class="tipBody">
+          <p><b>How it works.</b> This tool tells you which value to type in your app so a colour comes out exactly right in the final file. Use it when CGI work has to match a brand colour from the guidelines.</p>
+          <ol class="steps">
+            <li>In <b>Output</b>, pick the colour space of the final file (for example sRGB or Rec.709) and the colour it must have.</li>
+            <li>In <b>Input</b>, pick the colour space your app works in (for example ACEScg).</li>
+            <li><b>Input</b> now shows the values to type into your app. The note with a <span class="mk ok">✓</span> confirms they land on your colour.</li>
+          </ol>
+          <p><b>Warnings.</b> Notes with a <span class="mk">!</span> appear when a value falls outside its colour space (display values below 0 or above 1.0, linear values below 0) or would clip in the final file.</p>
+          <div class="chain" id="chain"></div>
+          <p class="muted">Built on OpenColorIO and ACES maths (OpenColorIO Project; A.M.P.A.S.). Licences are in the README next to the app.</p>
+        </div></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="bench" id="bench">
+    <section class="panel" id="expPanel" aria-label="Output">
+      <div class="head">
+        <div class="titleRow"><h2>Output</h2><span class="role" id="e-role">You set</span></div>
+        <select id="out" class="spaceSel" aria-label="Output of the final file" title="Output of the final file"></select>
+        <div class="spaceNote" id="e-note" hidden></div>
+      </div>
+      <div class="swatchFrame">
+        <button class="swatch pick" id="e-swatch" type="button" title="Pick a colour" aria-label="Pick the final colour" aria-haspopup="dialog" aria-expanded="false"><span class="swatchLabel" id="e-swlabel"></span></button>
+        <!-- our own colour picker (the browser's one has an eyedropper that can't see outside the app) -->
+        <div class="cpick" id="cpick" role="dialog" aria-label="Colour picker" hidden>
+          <div class="cpSV" id="cpSV" aria-label="Saturation and brightness"><div class="cpKnob" id="cpSVKnob"></div></div>
+          <div class="cpRow">
+            <button class="cpDrop" id="cpDrop" type="button" title="Pick a colour from anywhere on screen" aria-label="Pick a colour from anywhere on screen" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5l4 4"/><path d="M17.6 2.9a2.1 2.1 0 0 1 3 3L18.5 8l-2.5-2.5z"/><path d="M16 6.5L6.6 15.9 5 21l5.1-1.6 9.4-9.4"/></svg>
+            </button>
+            <span class="cpDot" id="cpDot"></span>
+            <div class="cpHue" id="cpHue" aria-label="Hue"><div class="cpKnob" id="cpHueKnob"></div></div>
+          </div>
+          <input class="cpHex" id="cpHex" spellcheck="false" autocomplete="off" aria-label="Hex">
+        </div>
+      </div>
+      <div class="rows" id="e-rows"></div>
+      <div class="chip" id="e-warn" role="status"></div>
+    </section>
+
+    <section class="panel" id="aePanel" aria-label="Input">
+      <div class="head">
+        <div class="titleRow"><h2>Input</h2><span class="role" id="a-role">Result</span></div>
+        <select id="interp" class="spaceSel" aria-label="Colour profile of the value you type" title="Colour profile of the value you type"></select>
+        <div class="spaceNote" id="a-note" hidden></div>
+      </div>
+      <div class="swatchFrame">
+        <div class="swatch" id="a-swatch"><span class="swatchLabel" id="a-swlabel"></span></div>
+      </div>
+      <div class="rows" id="a-rows"></div>
+      <div class="chip" id="a-chip"></div>
+      <div class="chip" id="a-warn" role="status"></div>
+      <div class="chip warn show" id="a-range" hidden>Above 1.0 doesn't fit in hex or HSL. Work in 32-bit float and type the Float values.</div>
+    </section>
+  </div>
+
+</div>
+
+<script>
+/*CORE*/
+</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const E = OCIOEngine;
+  const HOST = window.chrome && window.chrome.webview ? window.chrome.webview : null; // the native app
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // --- colour model helpers (0..1 floats; typed values may go past 1) ---
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const to8 = (v) => Math.round(clamp(v, 0, 1) * 255);
+  const inRange = (c) => c.every((v) => v >= -1e-6 && v <= 1 + 1e-6);
+  const hexOf = (c) => '#' + c.map((v) => to8(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+  function parseHex(s) {
+    let h = s.trim().replace(/^#/, '');
+    if (/^[0-9a-f]{3}$/i.test(h)) h = h.split('').map((x) => x + x).join('');
+    if (!/^[0-9a-f]{6}$/i.test(h)) return null;
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  }
+  function hueOf(r, g, b, mx, d) {
+    if (d <= 0) return 0;
+    const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  }
+  function rgbToHsl([r, g, b]) {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2;
+    const s = d > 0 ? d / (1 - Math.abs(2 * l - 1)) : 0;
+    return [hueOf(r, g, b, mx, d), s * 100, l * 100];
+  }
+  function rgbToHsv([r, g, b]) {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    return [hueOf(r, g, b, mx, d), mx > 0 ? (d / mx) * 100 : 0, mx * 100];
+  }
+  function hueSector(h, c, x) {
+    h = ((h % 360) + 360) % 360;
+    if (h < 60) return [c, x, 0];
+    if (h < 120) return [x, c, 0];
+    if (h < 180) return [0, c, x];
+    if (h < 240) return [0, x, c];
+    if (h < 300) return [x, 0, c];
+    return [c, 0, x];
+  }
+  function hslToRgb([h, s, l]) {
+    s /= 100; l /= 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    return hueSector(h, c, x).map((v) => v + m);
+  }
+  function hsvToRgb([h, s, v]) {
+    s /= 100; v /= 100;
+    const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+    return hueSector(h, c, x).map((q) => q + m);
+  }
+  const num = (s) => {
+    const v = parseFloat(String(s).replace(',', '.'));
+    return Number.isFinite(v) ? v : null;
+  };
+  const fmt = (v, d = 4) => { const s = v.toFixed(d); return /^-0\.0*$/.test(s) ? s.slice(1) : s; };
+  const fmt0 = (v) => String(Math.round(v) || 0);
+  const css = (c) => 'rgb(' + c.map(to8).join(',') + ')';
+
+  // ================================================================ colour models
+  // A model answers: final(in, out, v), typed(in, out, final), raw(...) for clipping, gamut(...) for warnings.
+  // BUILTIN is the studio's own ACES 1.0 maths (AS_STUDIO ACES 1.0). configModel() wraps any OCIO config.
+  const BUILTIN = (() => {
+    const IN = {
+      invert: { label: 'Invert ACES 1.0 SDR-video', ext: false, kind: 'display', note: 'sRGB numbers that already include the ACES look. Made for sRGB output.' },
+      srgb: { label: 'sRGB', ext: true, kind: 'display', note: 'plain sRGB numbers, like a texture. The ACES look darkens them on the way out.' },
+      cg: { label: 'ACEScg', ext: true, kind: 'aces', note: 'scene-linear ACES numbers, AP1 primaries (the working space).' },
+      ap0: { label: 'ACES2065-1', ext: true, kind: 'aces', note: 'scene-linear ACES numbers, AP0 primaries.' },
+      cct: { label: 'ACEScct', ext: true, kind: 'aces', note: 'log-encoded ACEScg.' },
+    };
+    const OUT = {
+      srgb: { label: 'sRGB', enc: 'encode sRGB curve' },
+      rec709: { label: 'Rec.709', enc: 'encode gamma 2.4 (BT.1886)' },
+    };
+    const toCg = { invert: ['decode sRGB curve', 'inverse ODT', 'inverse RRT', 'ACES2065-1', 'ACEScg'], srgb: ['decode sRGB curve', 'CIE-XYZ D65 (Bradford)', 'ACES2065-1', 'ACEScg'], cg: [], ap0: ['ACEScg'], cct: ['decode ACEScct', 'ACEScg'] };
+    return {
+      key: 'builtin',
+      name: 'AS_STUDIO ACES 1.0',
+      short: 'AS_STUDIO ACES 1.0 · built in',
+      inputs: () => Object.entries(IN).map(([id, x]) => Object.assign({ id }, x)),
+      outputs: Object.entries(OUT).map(([id, x]) => ({ id, label: x.label })),
+      defaults: () => ({ interp: 'invert', out: 'srgb' }),
+      prepare: async () => {},
+      final: (i, o, v) => ACESCore.exportOf(ACESCore.interpToCg(i, v), o),
+      raw: (i, o, v) => ACESCore.cgToDisplayLin(ACESCore.interpToCg(i, v)),
+      typed: (i, o, t) => ACESCore.cgToInterp(i, ACESCore.cgForExport(t, o)),
+      convert: (a, b, o, v) => ACESCore.cgToInterp(b, ACESCore.interpToCg(a, v)),
+      gamut: (i, v) => (IN[i].kind === 'display' ? { vals: v, space: 'sRGB', kind: 'display' } : { vals: ACESCore.interpToCg(i, v), space: 'ACEScg', kind: 'aces' }),
+      look: () => 'ACES 1.0',
+      outLabel: (o) => OUT[o].label,
+      steps: (i, o) => [IN[i].label + ' input'].concat(toCg[i], ['RRT 1.0', 'ODT Rec.709 100 nit dim', OUT[o].enc, OUT[o].label + ' final']),
+      help: () => ({
+        how: '<b>How it works.</b> Whatever the app (After Effects, Resolve, Cinema 4D, Houdini), every colour goes through the same look on the way out: the ACES 1.0 SDR-video view. The tool solves that backwards. Give it the colour the final file must have, pick the colour profile of the value you type, and it gives you the numbers to type. The note with a tick double-checks by running those numbers forward to the final file, rounded the way you\'d type them.',
+        profiles: '<b>Colour profiles.</b> <b>Invert ACES 1.0 SDR-video</b> is built for this: with sRGB output you type the brand hex as is. <b>sRGB</b> reads the numbers as a plain texture, so the look darkens them; bright brand colours then need values above 1.0. <b>ACEScg</b>, <b>ACES2065-1</b> and <b>ACEScct</b> are the raw ACES numbers, shown on the same 0–255 and % scales.',
+        outputs: '<b>Outputs.</b> <b>sRGB</b> is the config\'s sRGB display. <b>Rec.709</b> is the standard ACES 1.0 Rec.709 output: the same look, encoded with gamma 2.4 (BT.1886). It matches OCIO\'s built-in Rec.709 display to 0.0002. "Matches" means the pixel values in the final file equal the target hex. A Rec.709 file played back as sRGB will still look different, which no colour setting in the project can fix.',
+        foot: 'Built in: AS_STUDIO ACES 1.0, the ACES 1.0 SDR-video view with sRGB and Rec.709 outputs (the same maths as the studio\'s AS_STUDIO_RS config), checked with OCIO 2.5. On 3,000 random target colours every colour profile lands back on the target hex, except colours the ACES 1.0 look can\'t produce at all (about 1 in 300, mostly bright yellow-greens). Use the gear to load another config.',
+      }),
+    };
+  })();
+
+  const SEP = '\u0001';
+  // the kind of numbers a colour space holds, for the warnings
+  function kindOf(cs) {
+    const enc = cs.encoding;
+    if (cs.ref === 'display' || /sdr-video|hdr-video/.test(enc)) return 'display';
+    if (/linear/.test(enc)) return 'linear';
+    if (enc === 'log') return 'log';
+    const n = cs.name.toLowerCase();
+    if (/(^|[^a-z])(lin|linear)([^a-z]|$)|acescg|aces2065|xyz|scene/.test(n)) return 'linear';
+    if (/log|cct|acescc/.test(n)) return 'log';
+    if (/srgb|709|1886|gamma|g2\.|display|video|texture|p3|2020|8-?bit/.test(n)) return 'display';
+    return 'other';
+  }
+  function configModel(cfg, path) {
+    const isDataView = (d, v) => {
+      try {
+        if (v.colorspace && !v.viewTransform) return cfg.getCS(v.colorspace).isdata;
+        return cfg.getCS(v.displayColorspace || d.name).isdata;
+      } catch (e) { return true; }
+    };
+    const outputs = [];
+    for (const d of cfg.displays) for (const v of d.views) {
+      if (isDataView(d, v)) continue;
+      outputs.push({ id: d.name + SEP + v.name, label: d.name + ' · ' + v.name, display: d.name, view: v.name });
+    }
+    if (!outputs.length) throw new Error('This config has no display and view to output to.');
+    const outOf = (o) => outputs.find((x) => x.id === o) || outputs[0];
+    const realInverted = new Set();
+    const csInputs = [];
+    for (const cs of cfg.spaces) {
+      if (cs.isdata || cfg.inactive.has(cs.name.toLowerCase())) continue;
+      const iv = E.invertedView(cs.to);
+      if (iv) realInverted.add((iv.display + SEP + iv.view).toLowerCase());
+      csInputs.push({ id: 'cs' + SEP + cs.name, label: cs.name, group: cs.family || (cs.ref === 'display' ? 'Display' : 'Colour spaces'), ext: !iv, kind: iv ? 'display' : kindOf(cs), note: cs.description.split('\n')[0] });
+    }
+    // inverted views of the output's display come first: there you type the final colour as is
+    const inputsFor = (o) => {
+      const out = outOf(o), d = cfg.displays.find((x) => x.name === out.display);
+      const inv = d.views.filter((v) => !isDataView(d, v) && !realInverted.has((d.name + SEP + v.name).toLowerCase()))
+        .map((v) => ({ id: 'iv' + SEP + d.name + SEP + v.name, label: v.name + ' (inverted)', group: 'Inverted views', ext: false, kind: 'display', note: 'the ' + v.name + ' view undone: type the final colour as it should look.' }));
+      return inv.concat(csInputs);
+    };
+    const procs = new Map();
+    const opsFor = (i, o) => {
+      const out = outOf(o), p = i.split(SEP);
+      const fwd = cfg.dvtOps(E.SCENE_REF, out.display, out.view);
+      if (p[0] === 'iv') return E.invertOps(cfg.dvtOps(E.SCENE_REF, p[1], p[2])).concat(fwd);
+      return cfg.dvtOps(p[1], out.display, out.view);
+    };
+    const proc = (i, o) => {
+      const p = procs.get(i + SEP + SEP + o);
+      if (!p) throw new Error('not ready');
+      if (p.error) throw p.error;
+      return p;
+    };
+    const labelOf = (i, o) => (inputsFor(o).find((x) => x.id === i) || { label: i.split(SEP).pop() }).label;
+    const shortName = (cfg.doc && cfg.doc.name ? String(cfg.doc.name).trim() : '') || describePath(path).title;
+    return {
+      key: path,
+      cfg,
+      name: shortName,
+      short: shortName,
+      path,
+      inputs: (o) => inputsFor(o),
+      outputs,
+      defaults(o) {
+        const out = o && outputs.some((x) => x.id === o) ? o : outputs[0].id;
+        const list = inputsFor(out);
+        const firstReal = list.find((x) => x.id.startsWith('cs') && x.kind === 'display' && !x.ext);
+        const lin = (() => { try { return 'cs' + SEP + cfg.getCS('scene_linear').name; } catch (e) { return null; } })();
+        return { out, interp: (firstReal || list.find((x) => x.id === lin) || list[0]).id };
+      },
+      async prepare(i, o) {
+        const k = i + SEP + SEP + o;
+        if (procs.has(k)) return;
+        try { procs.set(k, E.processor(await E.build(cfg, cfg.io, () => opsFor(i, o)))); } catch (e) { procs.set(k, { error: e }); }
+      },
+      final: (i, o, v) => proc(i, o).forward(v),
+      raw: (i, o, v) => proc(i, o).raw(v),
+      typed: (i, o, t) => proc(i, o).inverse(t),
+      convert(a, b, o, v) { return proc(b, o).inverse(proc(a, o).forward(v)); },
+      gamut: (i, v, o) => {
+        const x = inputsFor(o).find((q) => q.id === i);
+        return { vals: v, space: x ? x.label : 'the colour space', kind: x ? x.kind : 'other' };
+      },
+      look: (o) => outOf(o).view,
+      outLabel: (o) => outOf(o).label,
+      steps(i, o) {
+        const out = outOf(o), view = cfg.findView(out.display, out.view), p = i.split(SEP);
+        const s = [labelOf(i, o) + ' input', p[0] === 'iv' ? 'undo the ' + p[2] + ' view' : 'to the scene reference'];
+        if (view.viewTransform) s.push(view.viewTransform + ' (view transform)', (view.displayColorspace || out.display) + ' (display)');
+        else s.push(view.colorspace + ' (the view\'s colour space)');
+        s.push(out.label + ' final');
+        return s;
+      },
+      help(o) {
+        const out = outOf(o);
+        return {
+          how: '<b>How it works.</b> Whatever the app (After Effects, Resolve, Cinema 4D, Houdini), every colour goes through the same view on the way out: <b>' + esc(out.view) + '</b> on the <b>' + esc(out.display) + '</b> display of this config. The tool solves that backwards. Give it the colour the final file must have, pick the colour profile of the value you type, and it gives you the numbers to type. The note with a tick double-checks by running those numbers forward, rounded the way you\'d type them.',
+          profiles: '<b>Colour profiles</b> are the config\'s colour spaces. The ones marked <b>(inverted)</b> undo a view: with that same view as the output, you type the final colour as is.',
+          outputs: '<b>Outputs</b> are the config\'s displays and views. "Matches" means the pixel values in the final file equal the target hex. The swatches show the numbers as sRGB, so for P3 or HDR outputs they are only a guide.',
+          foot: 'Config: <code>' + esc(path) + '</code>. ASTROLABE runs the config with its own copy of the OCIO maths. Checked against OCIO 2.5 on the configs that come with After Effects, Houdini, Cinema 4D, Redshift, Nuke and Blender: results agree within 0.001, ACES 1.x and 2.0 views within 0.0001.',
+        };
+      },
+    };
+  }
+
+  // ================================================================ state
+  const KEY = 'brand-aces-state-v3';
+  const state = { src: 'e', exp: [232 / 255, 69 / 255, 44 / 255], ae: [232 / 255, 69 / 255, 44 / 255], sel: {} };
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (s && Array.isArray(s.exp) && Array.isArray(s.ae)) {
+      state.src = s.src === 'a' ? 'a' : 'e';
+      state.exp = s.exp; state.ae = s.ae;
+      state.sel = s.sel && typeof s.sel === 'object' ? s.sel : {};
+      if (s.interp && s.out && !state.sel.builtin) state.sel.builtin = { interp: s.interp, out: s.out }; // older saved state
+    }
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ src: state.src, exp: state.exp, ae: state.ae, sel: state.sel })); } catch (e) {} };
+  let model = BUILTIN;
+  const cp = { h: 0, s: 0, v: 0, drag: false }; // the colour picker's own hue/saturation/value
+  let modelError = ''; // the selected profile/output pair can't be computed
+
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+  // --- the value rows, the same set on both panels ---
+  function rowsHTML(p, ext) {
+    const big = ext ? 'Infinity' : null;
+    const f = (g, i, label, o) =>
+      '<input class="v scrub" id="' + p + '-' + g + '-' + i + '" inputmode="decimal" aria-label="' + label + '"' +
+      ' data-step="' + o.step + '" data-min="' + o.min + '" data-max="' + o.max + '"' + (o.wrap ? ' data-wrap="' + o.wrap + '"' : '') +
+      ' data-dec="' + o.dec + '"' + (o.rel ? ' data-rel="1"' : '') + '>';
+    const row = (g, lab, inner, cls) =>
+      '<div class="row' + (cls ? ' ' + cls : '') + '"><span class="lab">' + lab + '</span>' + inner +
+      '<button class="copy" type="button" aria-label="Copy" title="Copy" data-copy="' + p + '-' + g + '">' + COPY_ICON + '</button></div>';
+    const tri = (g, labels, specs) => '<div class="fields">' + labels.map((l, i) => f(g, i, l, specs[i])).join('') + '</div>';
+    const ch = { step: 1, min: 0, max: big || 255, dec: 0 };
+    const hue = { step: 1, min: 0, max: 360, wrap: 360, dec: 0 };
+    const pct = { step: 0.5, min: 0, max: 100, dec: 1 };
+    const pctV = { step: 0.5, min: 0, max: big || 100, dec: 1, rel: ext };
+    const flt = { step: 0.002, min: ext ? -Infinity : 0, max: big || 1, dec: 4, rel: ext };
+    return [
+      row('hex', 'Hex', '<div class="fields one"><input class="v" id="' + p + '-hex-0" spellcheck="false" autocomplete="off" aria-label="Hex"></div>'),
+      row('rgb', 'RGB', tri('rgb', ['Red 0 to 255', 'Green 0 to 255', 'Blue 0 to 255'], [ch, ch, ch])),
+      row('hsl', 'HSL', tri('hsl', ['HSL hue degrees', 'HSL saturation percent', 'HSL lightness percent'], [hue, pct, pct])),
+      row('hsv', 'HSV', tri('hsv', ['HSV hue degrees', 'HSV saturation percent', 'HSV value percent'], [hue, pct, pctV])),
+      row('flt', 'Float', tri('flt', ['Red float', 'Green float', 'Blue float'], [flt, flt, flt]), 'float'),
+    ].join('');
+  }
+  $('e-rows').innerHTML = rowsHTML('e', false);
+  $('a-rows').innerHTML = rowsHTML('a', true);
+  const GROUPS = ['hex', 'rgb', 'hsl', 'hsv', 'flt'];
+  const ids = (p, g) => (g === 'hex' ? [p + '-hex-0'] : [0, 1, 2].map((i) => p + '-' + g + '-' + i));
+  const groupOf = (id) => id.slice(0, id.lastIndexOf('-')); // e.g. "e-rgb"
+
+  const sel = () => state.sel[model.key];
+  const curInput = () => model.inputs(sel().out).find((x) => x.id === sel().interp) || model.inputs(sel().out)[0];
+
+  // read one group of fields as 0..1 floats (extended panels may go past 1)
+  function readGroup(p, g) {
+    const ext = p === 'a' && curInput().ext;
+    const vals = ids(p, g).map((i) => num($(i).value));
+    if (g === 'hex') return parseHex($(p + '-hex-0').value);
+    if (vals.includes(null)) return null;
+    if (g === 'rgb') return vals.map((x) => (ext ? Math.max(0, x) : clamp(x, 0, 255)) / 255);
+    if (g === 'hsl') return hslToRgb([vals[0], clamp(vals[1], 0, 100), clamp(vals[2], 0, 100)]);
+    if (g === 'hsv') return hsvToRgb([vals[0], clamp(vals[1], 0, 100), ext ? Math.max(0, vals[2]) : clamp(vals[2], 0, 100)]);
+    return ext ? vals : vals.map((x) => clamp(x, 0, 1));
+  }
+
+  // fill one panel's fields from 0..1 floats
+  const copyText = {};
+  function fillPanel(p, c, skipGroup) {
+    if (!c) {
+      for (const g of GROUPS) ids(p, g).forEach((id) => { if (p + '-' + g !== skipGroup) { $(id).value = '—'; $(id).classList.add('na'); } });
+      for (const g of GROUPS) copyText[p + '-' + g] = '';
+      return false;
+    }
+    const ok = inRange(c);
+    const hsl = rgbToHsl(c), hsv = rgbToHsv(c);
+    const text = {
+      hex: ok ? [hexOf(c)] : ['—'],
+      rgb: c.map((v) => fmt0(Math.max(0, v) * 255)),
+      hsl: ok ? hsl.map(fmt0) : ['—', '—', '—'],
+      hsv: hsv.map(fmt0),
+      flt: c.map((v) => fmt(v)),
+    };
+    for (const g of GROUPS) {
+      ids(p, g).forEach((id, i) => {
+        const el = $(id);
+        if (p + '-' + g === skipGroup) return; // don't overwrite the fields being typed in or dragged
+        el.value = text[g][i];
+        el.classList.remove('bad');
+        el.classList.toggle('na', text[g][i] === '—');
+      });
+    }
+    copyText[p + '-hex'] = ok ? hexOf(c) : '';
+    copyText[p + '-rgb'] = 'rgb(' + text.rgb.join(', ') + ')';
+    copyText[p + '-hsl'] = ok ? 'hsl(' + text.hsl[0] + ', ' + text.hsl[1] + '%, ' + text.hsl[2] + '%)' : '';
+    copyText[p + '-hsv'] = 'hsv(' + text.hsv[0] + ', ' + text.hsv[1] + '%, ' + text.hsv[2] + '%)';
+    copyText[p + '-flt'] = text.flt.join(', ');
+    return ok;
+  }
+
+  // the typed value as you'd actually type it: 0-255 for display numbers in range, else 4-decimal floats
+  const asTyped = (inp, v) => (inp.kind === 'display' && inRange(v) ? v.map((x) => to8(x) / 255) : v.map((x) => +x.toFixed(4)));
+  const setChip = (id, text, cls) => { $(id).textContent = text; $(id).className = 'chip' + (text ? ' show' : '') + (cls ? ' ' + cls : ''); };
+
+  // dropdowns follow the model (and, for configs, the inverted views of the output's display)
+  function fillSelects() {
+    const s = sel();
+    $('out').innerHTML = model.outputs.map((o) => '<option value="' + esc(o.id) + '">' + esc(o.label) + '</option>').join('');
+    const list = model.inputs(s.out);
+    // grouped by family, each family where it first appears in the config
+    const groups = new Map();
+    for (const x of list) { const g = x.group || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); }
+    let html = '';
+    for (const [g, items] of groups) {
+      const opts = items.map((x) => '<option value="' + esc(x.id) + '">' + esc(x.label) + '</option>').join('');
+      html += g ? '<optgroup label="' + esc(g) + '">' + opts + '</optgroup>' : opts;
+    }
+    $('interp').innerHTML = html;
+    $('out').value = s.out;
+    $('interp').value = s.interp;
+  }
+
+  function render(skipGroup) {
+    const toAe = state.src === 'e'; // the final colour drives the typed value
+    const { interp, out } = sel();
+    const inp = curInput();
+    let exp, ae, err = modelError;
+    if (!err) {
+      try {
+        if (toAe) { exp = state.exp; ae = model.typed(interp, out, exp); state.ae = ae; }
+        else { ae = state.ae; exp = model.final(interp, out, ae); state.exp = exp; }
+        if (!ae.every(Number.isFinite) || !exp.every(Number.isFinite)) throw new Error('The calculation came out invalid for this colour.');
+      } catch (e) { err = e.message || String(e); }
+    }
+    if (err) { if (toAe) { exp = state.exp; ae = null; } else { ae = state.ae; exp = null; } }
+    const expHex = exp ? hexOf(exp) : '';
+
+    // final result panel
+    fillPanel('e', exp, skipGroup);
+    $('e-swatch').style.background = exp ? css(exp) : 'transparent';
+    if (exp && !cp.drag) cpSync();
+    $('e-swlabel').textContent = expHex;
+
+    // typed-value panel
+    const fits = fillPanel('a', ae, skipGroup);
+    $('expPanel').classList.toggle('isOut', !toAe);
+    $('aePanel').classList.toggle('isOut', toAe);
+
+    // --- out-of-colour-space warnings ---
+    const CH = ['R', 'G', 'B'];
+    const listCh = (vals, idx) => idx.map((i) => CH[i] + ' ' + fmt(vals[i], 3)).join(', ');
+    let aWarn = '';
+    if (ae) {
+      const g = model.gamut(interp, ae, out);
+      const disp = g.kind === 'display';
+      const chk = g.vals;
+      const lowA = disp || g.kind === 'linear' || g.kind === 'aces' ? [0, 1, 2].filter((i) => chk[i] < -1e-4) : [];
+      const highA = disp ? [0, 1, 2].filter((i) => chk[i] > 1 + 1e-4) : [];
+      if (lowA.length || highA.length) {
+        const parts = [];
+        if (highA.length) parts.push(listCh(chk, highA) + ' above 1.0');
+        if (lowA.length) parts.push(listCh(chk, lowA) + ' below 0');
+        if (disp) {
+          aWarn = 'Outside the ' + g.space + ' colour space: ' + parts.join('; ') + '. ' +
+            (lowA.length ? 'Below 0 means the colour is more saturated than ' + g.space + ' can hold. ' : '') +
+            'Hex, 0–255 and HSL can\'t store this. Type the Float values in a 32-bit float project, or use a linear colour profile instead.';
+        } else if (g.kind === 'aces') {
+          aWarn = 'Outside the ACES gamut: ' + parts.join('; ') + ' (in ACEScg). This colour can\'t exist in ACES, so it will clip.';
+        } else {
+          aWarn = 'Outside the ' + g.space + ' gamut: ' + parts.join('; ') + '. The colour is more saturated than ' + g.space + ' can hold, so it may clip.';
+        }
+      }
+      $('a-range').hidden = fits || (disp && highA.length > 0);
+    } else $('a-range').hidden = true;
+    setChip('a-warn', err ? err + ' Pick another colour profile or output.' : aWarn, 'warn');
+
+    // the final file: a typed value whose result lands outside 0..1 gets clipped in the final file
+    let eWarn = '';
+    if (!toAe && ae && !err) {
+      const lin = model.raw(interp, out, ae);
+      const lowE = [0, 1, 2].filter((i) => lin[i] < -1e-4), highE = [0, 1, 2].filter((i) => lin[i] > 1 + 1e-4);
+      if (lowE.length || highE.length) {
+        const parts = [];
+        if (highE.length) parts.push(CH.filter((_, i) => highE.includes(i)).join(', ') + ' above white');
+        if (lowE.length) parts.push(CH.filter((_, i) => lowE.includes(i)).join(', ') + ' below black');
+        eWarn = 'Outside the ' + model.outLabel(out) + ' range of the final file (' + parts.join('; ') + '). Those channels clip, so the final colour is cut to fit.';
+      }
+    }
+    setChip('e-warn', eWarn, 'warn');
+    $('a-swatch').style.background = exp ? css(exp) : 'transparent';
+    $('a-swlabel').textContent = expHex;
+
+    // double-check: run the numbers as you'd type them forward to the final file
+    let note = '', cls = '';
+    if (toAe && ae && !err) {
+      const typedHex = hexOf(model.final(interp, out, asTyped(inp, ae)));
+      const exactHex = hexOf(model.final(interp, out, ae));
+      const typedAs = inp.kind === 'display' && fits ? 'the hex or 0–255 values' : 'the Float values';
+      if (typedHex === expHex) {
+        note = 'Comes out as ' + expHex + ' when you type ' + typedAs + ': matches the final colour.';
+        cls = 'ok';
+      } else if (exactHex === expHex) {
+        note = 'The 0–255 values land on ' + typedHex + '. Type the Float values (32-bit float) to hit ' + expHex + ' exactly.';
+        cls = 'info';
+      } else {
+        note = 'The ' + model.look(out) + ' view can\'t produce this colour exactly. The closest it gets is ' + exactHex + '.';
+        cls = 'warn';
+      }
+    }
+    setChip('a-chip', note, cls);
+
+    // header, roles, help text, render path
+    // small label: which side you set, which side is the result
+    $('e-role').innerHTML = toAe ? '<em>You set</em>' : 'Result';
+    $('a-role').innerHTML = toAe ? 'Result' : '<em>You set</em>';
+    let steps = [];
+    try { steps = model.steps(interp, out); } catch (e) { steps = []; }
+    $('chain').innerHTML = steps.length ? 'Render path: ' + steps.map((s, i) => (i === 0 || i === steps.length - 1 ? '<b>' + esc(s) + '</b>' : esc(s))).join('  →  ') : '';
+    $('cfgName').textContent = model.short;
+    save();
+  }
+
+  // switch the selected profile/output, preparing the maths first (a config may need to read LUT files)
+  async function select(next) {
+    const s = sel();
+    const prev = { interp: s.interp, out: s.out };
+    Object.assign(s, next);
+    if (next.out !== undefined && !model.inputs(s.out).some((x) => x.id === s.interp)) s.interp = model.defaults(s.out).interp;
+    // keep the same final colour when the typed value drives: re-express it in the new profile
+    if (state.src === 'a' && next.interp !== undefined && prev.interp !== s.interp) {
+      try {
+        await model.prepare(prev.interp, s.out);
+        await model.prepare(s.interp, s.out);
+        state.ae = model.convert(prev.interp, s.interp, s.out, state.ae);
+      } catch (e) { state.src = 'e'; }
+    }
+    await model.prepare(s.interp, s.out);
+    modelError = '';
+    try { model.final(s.interp, s.out, [0.5, 0.5, 0.5]); } catch (e) { modelError = e.message || String(e); }
+    fillSelects();
+    render();
+  }
+
+  async function useModel(m) {
+    model = m;
+    const d = m.defaults(state.sel[m.key] && state.sel[m.key].out);
+    const s = state.sel[m.key];
+    if (!s || !m.outputs.some((o) => o.id === s.out) || !m.inputs(s.out).some((x) => x.id === s.interp)) state.sel[m.key] = d;
+    state.src = 'e'; // a new config: keep the final colour, work out the value to type
+    await select({});
+  }
+
+  // --- typing ---
+  function onEdit(id) {
+    const grp = groupOf(id), p = grp[0], g = grp.slice(2);
+    const v = readGroup(p, g);
+    if (!v) { $(id).classList.add('bad'); return; }
+    state.src = p; // whichever panel you edit drives the other one
+    if (p === 'e') state.exp = v; else state.ae = v;
+    render(grp);
+  }
+  document.querySelectorAll('input.v').forEach((el) => {
+    el.addEventListener('input', () => onEdit(el.id));
+    el.addEventListener('blur', () => { if (!document.body.classList.contains('scrubbing')) render(); });
+  });
+  // paste "0.18, 0.2, 0.3" into any typed-value float box
+  [0, 1, 2].forEach((i) => $('a-flt-' + i).addEventListener('paste', (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData('text');
+    const parts = t.match(/-?\d*\.?\d+(?:e-?\d+)?/gi);
+    if (parts && parts.length >= 3) { e.preventDefault(); state.src = 'a'; state.ae = parts.slice(0, 3).map(Number); render(); }
+  }));
+
+  // --- drag a number box left/right to change it (mouse only, so touch still scrolls) ---
+  document.querySelectorAll('input.v.scrub').forEach((el) => {
+    let lastX = 0, cur = 0, dragging = false, active = false;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || el.readOnly || document.activeElement === el) return;
+      active = true; dragging = false; lastX = e.clientX;
+      cur = num(el.value) ?? 0;
+      el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!active) return;
+      const dx = e.clientX - lastX;
+      if (!dragging && Math.abs(dx) < 3) return;
+      if (!dragging) { dragging = true; document.body.classList.add('scrubbing'); }
+      lastX = e.clientX;
+      const d = el.dataset;
+      const speed = e.shiftKey ? 10 : e.ctrlKey || e.altKey ? 0.1 : 1;
+      let step = parseFloat(d.step);
+      if (d.rel) step = Math.max(step, Math.abs(cur) * 0.004); // bigger steps for big values
+      cur += dx * step * speed;
+      const wrap = parseFloat(d.wrap);
+      if (wrap) cur = ((cur % wrap) + wrap) % wrap;
+      cur = clamp(cur, parseFloat(d.min), parseFloat(d.max));
+      const dec = speed < 1 ? Math.max(1, +d.dec) + 1 : +d.dec;
+      el.value = String(+cur.toFixed(dec));
+      onEdit(el.id);
+    });
+    const end = (e) => {
+      if (!active) return;
+      active = false;
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      if (dragging) { document.body.classList.remove('scrubbing'); render(); }
+      else { el.focus(); el.select(); } // a plain click: type as usual
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  });
+
+  // --- controls ---
+  // colour picker under the final swatch. h/s/v are kept here so the hue doesn't jump on greys.
+  function cpSync() {
+    const [h, s, v] = rgbToHsv(state.exp);
+    if (s > 0.5 && v > 0.5) cp.h = h;
+    cp.s = s / 100; cp.v = v / 100;
+    cpPaint();
+  }
+  function cpPaint() {
+    $('cpSV').style.background = 'linear-gradient(to top, #000, rgb(0 0 0 / 0)), linear-gradient(to right, #fff, hsl(' + cp.h + ', 100%, 50%))';
+    $('cpSVKnob').style.left = cp.s * 100 + '%';
+    $('cpSVKnob').style.top = (1 - cp.v) * 100 + '%';
+    $('cpHueKnob').style.left = (cp.h / 360) * 100 + '%';
+    $('cpDot').style.background = css(state.exp);
+    if (document.activeElement !== $('cpHex')) { $('cpHex').value = hexOf(state.exp); $('cpHex').classList.remove('bad'); }
+  }
+  function cpSet() {
+    state.src = 'e';
+    state.exp = hsvToRgb([cp.h, cp.s * 100, cp.v * 100]).map((x) => Math.round(clamp(x, 0, 1) * 255) / 255); // a whole hex value
+    render();
+    cpPaint();
+  }
+  const cpOpen = (open) => {
+    $('cpick').hidden = !open;
+    $('e-swatch').setAttribute('aria-expanded', String(open));
+    if (open) cpSync();
+  };
+  $('e-swatch').addEventListener('click', () => cpOpen($('cpick').hidden));
+  document.addEventListener('click', (e) => { if (e.target.isConnected && !$('cpick').contains(e.target) && !$('e-swatch').contains(e.target)) cpOpen(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cpOpen(false); });
+  const cpDrag = (el, onMove) => {
+    const move = (e) => { const r = el.getBoundingClientRect(); onMove(clamp((e.clientX - r.left) / r.width, 0, 1), clamp((e.clientY - r.top) / r.height, 0, 1)); cpSet(); };
+    el.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; cp.drag = true; el.setPointerCapture(e.pointerId); move(e); e.preventDefault(); });
+    el.addEventListener('pointermove', (e) => { if (cp.drag && el.hasPointerCapture(e.pointerId)) move(e); });
+    const end = (e) => { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); cp.drag = false; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  };
+  cpDrag($('cpSV'), (x, y) => { cp.s = x; cp.v = 1 - y; });
+  cpDrag($('cpHue'), (x) => { cp.h = Math.min(x * 360, 359.9); });
+  $('cpHex').addEventListener('input', (e) => {
+    const v = parseHex(e.target.value);
+    e.target.classList.toggle('bad', !v);
+    if (v) { state.src = 'e'; state.exp = v; render(); }
+  });
+  $('cpHex').addEventListener('blur', () => cpPaint());
+  // eyedropper for the whole screen: the app does it itself; Chrome and Edge have one built in
+  const useHex = (hex) => { const v = hex && parseHex(hex); if (v) { state.src = 'e'; state.exp = v; render(); } };
+  if (HOST || window.EyeDropper) $('cpDrop').hidden = false;
+  if (HOST) HOST.addEventListener('message', (e) => { if (e.data && e.data.type === 'picked-color') useHex(e.data.hex); });
+  $('cpDrop').addEventListener('click', async () => {
+    if (HOST) { HOST.postMessage('eyedropper'); return; }
+    try { useHex((await new window.EyeDropper().open()).sRGBHex); } catch (err) {} // Esc cancels
+  });
+  $('interp').addEventListener('change', (e) => { select({ interp: e.target.value }); });
+  $('out').addEventListener('change', (e) => { select({ out: e.target.value }); });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.copy');
+    if (!b) return;
+    const text = copyText[b.dataset.copy] || '';
+    if (!text) return;
+    const ok = () => { b.innerHTML = CHECK_ICON; b.classList.add('done'); setTimeout(() => { b.innerHTML = COPY_ICON; b.classList.remove('done'); }, 1200); };
+    try { navigator.clipboard.writeText(text).then(ok, () => fallback(text, ok)); } catch (err) { fallback(text, ok); }
+  });
+  function fallback(text, ok) {
+    const t = document.createElement('textarea');
+    t.value = text; document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); ok(); } catch (e) {}
+    t.remove();
+  }
+
+  // ================================================================ colour config (settings menu)
+  // In the app, files are read through the app (any path on this PC). In a browser, you pick the
+  // .ocio file, or its folder when the config uses LUT files.
+  const CFG_KEY = 'astrolabe-config-v1';
+  const store = { active: null, recent: [], mem: {} };
+  try { Object.assign(store, JSON.parse(localStorage.getItem(CFG_KEY) || '{}')); } catch (e) {}
+  const saveStore = () => {
+    try { localStorage.setItem(CFG_KEY, JSON.stringify(store)); } catch (e) { store.mem = {}; try { localStorage.setItem(CFG_KEY, JSON.stringify(store)); } catch (e2) {} }
+  };
+  let found = []; // configs found on this PC (app only)
+  let memFiles = new Map(); // browser: picked files by their path
+  const status = (t) => { $('cfgStatus').textContent = t || ''; };
+  const norm = (p) => String(p).replace(/\\/g, '/').toLowerCase();
+
+  async function hostText(url) {
+    try { const r = await fetch(url); return r.ok ? await r.text() : null; } catch (e) { return null; }
+  }
+  const io = (path) => HOST
+    ? { path, readText: (p) => hostText('https://astrolabe.files/read?path=' + encodeURIComponent(p)), getEnv: (n) => hostText('https://astrolabe.files/env?name=' + encodeURIComponent(n)) }
+    : {
+      path,
+      readText: async (p) => { const f = memFiles.get(norm(p)); return f ? (typeof f === 'string' ? f : await f.text()) : null; },
+      getEnv: async () => null,
+    };
+
+  // a readable name for a config path: the file (or its folder, for "config.ocio") and the app it came with
+  function describePath(p) {
+    const parts = String(p).split(/[\\/]/).filter(Boolean);
+    const apps = [[/After Effects (\d+)/i, 'After Effects $1'], [/Houdini ([\d.]+)/i, 'Houdini $1'], [/Cinema 4D (\d+)/i, 'Cinema 4D $1'], [/Redshift (\d+)/i, 'Redshift $1'],
+      [/ProgramData[\\/]redshift/i, 'Redshift'], [/Blender ([\d.]+)/i, 'Blender $1'], [/Nuke([\d.v]+)/i, 'Nuke $1'], [/DaVinci Resolve/i, 'Resolve'], [/Media Encoder (\d+)/i, 'Media Encoder $1'], [/Photoshop (\d+)/i, 'Photoshop $1']];
+    let app = '';
+    for (const [re, t] of apps) { const m = String(p).match(re); if (m) { app = t.replace('$1', m[1] || ''); break; } }
+    let title = (parts[parts.length - 1] || p).replace(/\.ocio$/i, '');
+    if (/^config$/i.test(title)) {
+      const parent = parts[parts.length - 2] || '';
+      title = parent && !/^(ocio|data|configs|colormanagement|luts|picked|[a-z]:)$/i.test(parent) ? parent : app ? app + ' config' : 'config';
+    }
+    return { title, sub: app || parts.slice(0, -1).join('\\') };
+  }
+
+  // the default: 'builtin', a config path, or null (then the app opens with the config you used last)
+  const curKey = () => (model === BUILTIN ? 'builtin' : model.key);
+  const isDefault = (k) => !!store.def && norm(store.def) === norm(k || 'builtin');
+  const defName = () => (store.def === 'builtin' ? 'AS_STUDIO ACES 1.0' : describePath(store.def).title);
+  function renderMenu() {
+    const on = (k) => (model.key && k && norm(model.key) === norm(k)) || (!k && model === BUILTIN);
+    const row = (path, title, sub) =>
+      '<button class="cfgRow' + (on(path) ? ' on' : '') + '" type="button" data-path="' + esc(path || '') + '"' + (path ? ' title="' + esc(path) + '"' : '') +
+      '><span class="mark">✓</span><span><b>' + esc(title) + (isDefault(path) ? '<span class="defTag">default</span>' : '') + '</b>' +
+      (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span></button>';
+    let html = '<p class="menuHead">Built in</p>' + row(null, 'AS_STUDIO ACES 1.0', 'ACES 1.0 SDR-video with sRGB and Rec.709 outputs, checked against OCIO.');
+    const seen = new Set(found.map(norm));
+    const recent = store.recent.filter((p) => !seen.has(norm(p)));
+    if (model !== BUILTIN && !store.recent.some((p) => norm(p) === norm(model.key)) && !seen.has(norm(model.key))) recent.unshift(model.key);
+    if (store.def && store.def !== 'builtin' && !recent.some((p) => norm(p) === norm(store.def)) && !seen.has(norm(store.def))) recent.push(store.def);
+    // what the app opens with
+    $('cfgDef').innerHTML = isDefault(curKey())
+      ? '<span>Opens with this config every time.</span><button class="link" type="button" data-def="clear">Clear default</button>'
+      : '<span>' + (store.def ? 'Opens with ' + esc(defName()) + '.' : 'Opens with the config you used last.') + '</span><button class="link" type="button" data-def="set">Make this the default</button>';
+    if (recent.length) html += '<p class="menuHead">Recent</p>' + recent.map((p) => { const d = describePath(p); return row(p, d.title, d.sub); }).join('');
+    if (found.length) html += '<p class="menuHead">On this PC</p>' + found.map((p) => { const d = describePath(p); return row(p, d.title, d.sub); }).join('');
+    $('cfgList').innerHTML = html;
+  }
+
+  async function loadConfig(path, text) {
+    status('Loading ' + describePath(path).title + '…');
+    try {
+      const ioObj = io(path);
+      if (text == null) text = await ioObj.readText(path);
+      if (text == null) throw new Error('Could not read ' + path + '.');
+      const cfg = await E.load(text, ioObj);
+      const m = configModel(cfg, path);
+      await useModel(m);
+      store.active = path;
+      store.recent = [path].concat(store.recent.filter((p) => norm(p) !== norm(path))).slice(0, 6);
+      if (!HOST) {
+        // the browser can keep a config that needs no other files
+        const needsFiles = [...cfg.files.values()].some((t) => t != null);
+        if (!needsFiles) store.mem[path] = text; else delete store.mem[path];
+        for (const k of Object.keys(store.mem)) if (!store.recent.includes(k) && k !== store.def) delete store.mem[k];
+      }
+      saveStore();
+      status(modelError ? '' : 'Using ' + m.name + ': ' + m.outputs.length + ' outputs, ' + cfg.spaces.length + ' colour spaces.');
+      $('cfgFolderBtn').hidden = true;
+    } catch (e) {
+      const msg = e.message || String(e);
+      const needFolder = !HOST && /isn.t next to the config/.test(msg);
+      status('Could not load it. ' + msg +(needFolder ? ' Pick the config\'s folder so its LUT files come along.' : ''));
+      $('cfgFolderBtn').hidden = !needFolder;
+    }
+    renderMenu();
+  }
+
+  async function useBuiltin() {
+    store.active = null;
+    saveStore();
+    await useModel(BUILTIN);
+    status('');
+    renderMenu();
+  }
+
+  // open/close the menu
+  const menu = $('cfgTip');
+  const setOpen = (open) => {
+    menu.classList.toggle('open', open);
+    $('cfgBtn').setAttribute('aria-expanded', String(open));
+    if (open) renderMenu();
+  };
+  $('cfgBtn').addEventListener('click', () => setOpen(!menu.classList.contains('open')));
+  $('cfgName').addEventListener('click', () => setOpen(true));
+  // close on a click outside (a button the menu just redrew is no longer in the page, but was inside)
+  document.addEventListener('click', (e) => { if (e.target.isConnected && !menu.contains(e.target) && e.target !== $('cfgName')) setOpen(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+  $('cfgDef').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-def]');
+    if (!b) return;
+    if (b.dataset.def === 'set') {
+      store.def = curKey();
+      if (!HOST && store.def !== 'builtin' && !store.mem[store.def]) status('A browser keeps only configs without LUT files. This one will need picking again next time.');
+    } else store.def = null;
+    saveStore();
+    renderMenu();
+  });
+  $('cfgList').addEventListener('click', (e) => {
+    const b = e.target.closest('.cfgRow');
+    if (!b) return;
+    const p = b.dataset.path;
+    if (!p) { useBuiltin(); return; }
+    if (HOST) loadConfig(p);
+    else if (store.mem[p]) { memFiles = new Map(); loadConfig(p, store.mem[p]); }
+    else { status('Pick the file again: a browser can\'t reopen files by itself.'); $('cfgFile').click(); }
+  });
+
+  // picking a config
+  let pickResolve = null;
+  if (HOST) {
+    HOST.addEventListener('message', (e) => {
+      const d = e.data;
+      if (d && d.type === 'picked' && pickResolve) { const r = pickResolve; pickResolve = null; r(d.path || null); }
+    });
+  }
+  $('cfgLoad').addEventListener('click', async () => {
+    if (HOST) {
+      const path = await new Promise((res) => { pickResolve = res; HOST.postMessage('pick'); });
+      if (path) loadConfig(path);
+    } else $('cfgFile').click();
+  });
+  $('cfgFile').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const path = '/picked/' + f.name;
+    memFiles = new Map([[norm(path), f]]);
+    loadConfig(path, await f.text());
+  });
+  $('cfgFolderBtn').addEventListener('click', () => $('cfgFolder').click());
+  $('cfgFolder').addEventListener('change', async (e) => {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    memFiles = new Map(files.map((f) => [norm('/picked/' + (f.webkitRelativePath || f.name)), f]));
+    const configs = files.filter((f) => /\.ocio$/i.test(f.name));
+    if (!configs.length) { status('No .ocio file in that folder.'); return; }
+    const want = store.recent[0] && store.recent[0].split('/').pop();
+    const f = configs.find((c) => c.name === want) || configs[0];
+    loadConfig('/picked/' + (f.webkitRelativePath || f.name), await f.text());
+  });
+
+  // start: the default config if one is set, else the config you used last
+  (async () => {
+    await useModel(BUILTIN);
+    if (HOST) { try { const r = await fetch('https://astrolabe.files/known'); if (r.ok) found = await r.json(); } catch (e) {} }
+    const start = store.def ? (store.def === 'builtin' ? null : store.def) : store.active;
+    if (start && (HOST || store.mem[start])) {
+      await loadConfig(start, HOST ? null : store.mem[start]);
+      if (model === BUILTIN && !store.def) { store.active = null; saveStore(); }
+    } else if (store.def === 'builtin' && store.active) { store.active = null; saveStore(); }
+  })();
+
+  // In the app window keep the window exactly the size of the app: fit on open,
+  // follow the content when a note appears or goes, and snap back if the window is dragged.
+  // Browser tabs ignore resizeBy, and inside a frame (the online version) this is skipped.
+  if (window.top === window) {
+    const wrap = document.querySelector('.wrap');
+    const pad = () => parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
+    const fit = () => {
+      if (document.body.classList.contains('scrubbing')) return;
+      const w = Math.ceil(parseFloat(getComputedStyle(wrap).maxWidth) + parseFloat(getComputedStyle(document.body).paddingLeft) * 2);
+      const h = Math.ceil(wrap.getBoundingClientRect().bottom + window.scrollY + pad());
+      // the standalone apps size their own window: the native one (WebView2) and the Electron one
+      if (HOST) { HOST.postMessage('fit:' + w + ':' + h); return; }
+      if (window.ocioApp) { window.ocioApp.fit(w, h); return; }
+      const dw = w - window.innerWidth, dh = h - window.innerHeight;
+      if (Math.abs(dw) > 1 || Math.abs(dh) > 1) { try { window.resizeBy(dw, dh); } catch (e) {} }
+    };
+    let timer;
+    const later = () => { clearTimeout(timer); timer = setTimeout(fit, 150); };
+    window.addEventListener('resize', later);
+    if (window.ResizeObserver) new ResizeObserver(later).observe(wrap);
+    window.addEventListener('load', fit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  }
+})();
+</script>
