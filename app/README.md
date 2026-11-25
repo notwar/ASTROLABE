@@ -14,6 +14,16 @@ To keep it in the taskbar: while it's open, right-click its taskbar icon and cho
 
 Run it straight from this folder or copy the exe anywhere you like.
 
+Closing the window hides it to the tray (the ASTROLABE icon by the clock). It starts there when Windows starts, so the shortcut below always works. To stop it, right-click the tray icon and choose **Quit**. Untick **Start with Windows** in that menu or in the gear menu if you don't want it at login.
+
+### Shortcut
+
+Press **Win+Shift+C** in any app to pick a colour from the screen. ASTROLABE opens with that colour as the Output. Esc cancels and leaves it in the tray.
+
+To use other keys, open the gear menu, click the keys under **Shortcut** and press the new ones (Win, Ctrl or Alt, plus a letter, number or F key). If another app already uses them, it says so and keeps the old keys. PowerToys Color Picker uses Win+Shift+C too: turn that off in PowerToys, or give ASTROLABE other keys.
+
+`ASTROLABE.exe --pick` starts straight in the picker, for a desktop shortcut or a mouse button.
+
 ## Colour config
 
 Out of the box it uses its built-in config, **AS_STUDIO ACES 1.0**: the ACES 1.0 SDR-video view with sRGB and Rec.709 outputs, the same maths as the studio's AS_STUDIO_RS config.
@@ -35,8 +45,10 @@ Open `ASTROLABE.html` in Chrome or Safari and bookmark it. **Load config…** as
 ## Using it
 
 - **Output** (left): the colour space of the final file and the colour it must have. **Input** (right): the colour space your app works in, and the values to type there.
-- Click the left swatch for a colour picker: a colour square, a hue slider and a hex box.
-- Its eyedropper button takes the colour from anything on screen (a PDF, a website, a frame). The screen freezes with a magnifier: click a pixel to pick it. Arrow keys move one pixel, Esc cancels. Works on every monitor. On a Mac, Chrome and Edge have this too; Safari doesn't.
+- Each side has its hex, three sliders (switch between RGB, HSL and HSV) and the Float values. The slider colours show what each position gives in the final file.
+- The eyedropper next to the Output hex takes the colour from anything on screen (a PDF, a website, a frame). The screen freezes, the cursor becomes a pipette with a chip of the colour under it, and a magnifier shows the pixels around it: click a pixel to pick it. Arrow keys move one pixel, Esc cancels. Works on every monitor. On a Mac, Chrome and Edge have this too; Safari doesn't.
+- The row at the bottom keeps your last 8 Output colours, newest first. Click one to use it again.
+- **Always on top** (right-click anywhere in the window, the gear menu, or the tray menu) keeps the window above other apps, handy next to a full-screen After Effects. It stays on until you untick it.
 - Change either side. The side you changed last drives the other.
 - Drag any number box left or right to change it. Shift is faster, Ctrl is finer.
 - The note with a tick checks the numbers as you'd type them. Notes with a ! warn when a value falls outside its colour space or would clip.

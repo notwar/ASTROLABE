@@ -43,6 +43,12 @@ select {
 
 /* logo bar */
 header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* in the app the header is the title bar: drag it to move the window; its buttons fade in on hover */
+body.app { padding-top: 12px; }
+body.app header { cursor: default; min-height: 44px; } /* a taller bar to grab */
+.winCtl { display: flex; gap: 2px; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
+.winCtl[hidden] { display: none; }
+html:hover .winCtl, .winCtl:focus-within { opacity: 1; }
 .brand { display: flex; align-items: center; gap: 8px; color: var(--fg); min-width: 0; }
 .brand svg { width: 20px; height: 20px; flex: none; }
 .brand span { font-size: 11px; font-weight: 600; letter-spacing: 0.22em; }
@@ -54,11 +60,12 @@ header { display: flex; align-items: center; justify-content: space-between; gap
   width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: transparent;
   color: var(--muted); font: 600 11px/1 var(--font-ui); cursor: help; display: grid; place-items: center;
 }
-.tipBtn:hover, .tip:focus-within .tipBtn { color: var(--fg); border-color: var(--muted); }
+.tipBtn:hover, .tipBtn:focus-visible { color: var(--fg); border-color: var(--muted); }
 .tipBtn svg { width: 12px; height: 12px; }
 .tipPop { display: none; position: absolute; right: 0; top: 100%; padding-top: 6px; z-index: 20; width: min(380px, calc(100vw - 40px)); }
-.tip.narrow .tipPop { width: min(240px, calc(100vw - 40px)); }
-.tip:hover .tipPop, .tip:focus-within .tipPop { display: block; }
+/* help shows while the mouse is on the button or the popup, and goes when it leaves. Clicking the
+   button again hides it; keyboard focus (Tab) also opens it. A mouse click doesn't keep it open. */
+.tip:not(.closed):hover .tipPop, .tip:has(.tipBtn:focus-visible) .tipPop { display: block; }
 .tipBody {
   background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); display: grid; gap: 7px; font-size: 10px; line-height: 1.5;
@@ -80,7 +87,7 @@ kbd { font-family: var(--font-num); font-size: 9px; border: 1px solid var(--line
 .cfgName:hover { color: var(--fg); background: var(--sunken); }
 .tools { position: relative; }
 .tip.menu { position: static; } /* the menu hangs from the right edge of the bar, so it never runs off the left */
-.tip.menu:hover .tipPop, .tip.menu:focus-within .tipPop { display: none; }
+.tip.menu:hover .tipPop, .tip.menu:has(.tipBtn:focus-visible) .tipPop { display: none; }
 .tip.menu.open .tipPop { display: block; }
 .tip.menu .tipBtn { cursor: pointer; }
 .tip.menu.open .tipBtn { color: var(--fg); border-color: var(--muted); }
@@ -115,81 +122,82 @@ kbd { font-family: var(--font-num); font-size: 9px; border: 1px solid var(--line
 .cfgStatus { color: var(--muted); font-size: 9.5px; margin-top: 6px !important; }
 .cfgStatus:empty { display: none; }
 
-/* panels */
-.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
-.panel {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
-  display: grid; gap: 12px; align-content: start; min-width: 0;
+/* panels: flat, no boxes around fields, space between sections (after ANTILABE) */
+/* one block: Output and Input side by side, a thin divider between them */
+.bench {
+  display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr); gap: 20px; align-items: stretch;
+  background: var(--surface); border-radius: 10px; padding: 16px 18px;
 }
-.head { display: grid; gap: 8px; }
-.titleRow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.divider { background: var(--line); }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; min-width: 0; }
+.head { display: grid; gap: 6px; }
 .head h2 { font-size: 12.5px; font-weight: 600; margin: 0; }
-.role { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; color: var(--faint); }
-.role em { font-style: normal; color: var(--fg); }
-select.spaceSel { font-size: 11px; font-weight: 500; width: 100%; }
-.spaceNote { font-size: 9px; color: var(--muted); }
+/* dropdowns are an underline */
+select.spaceSel {
+  font-size: 11px; font-weight: 500; width: 100%; height: 26px; padding: 0 2px; background: transparent; color: var(--fg);
+  border: 0; border-bottom: 1px solid var(--line); border-radius: 0; outline: none;
+}
+select.spaceSel:hover { border-bottom-color: var(--muted); }
+select.spaceSel:focus-visible { outline: none; border-bottom-color: var(--fg); }
+select.spaceSel option, select.spaceSel optgroup { background: var(--surface); color: var(--fg); }
 
-/* swatches on a thin 18% grey surround, the way you'd judge a colour on set */
-.swatchFrame { background: var(--grey18); border-radius: 7px; padding: 5px; display: grid; position: relative; }
-.swatch { aspect-ratio: 16 / 7; max-width: 100%; border-radius: 4px; position: relative; overflow: hidden; display: block; }
-button.swatch { width: 100%; border: 0; padding: 0; font: inherit; }
-/* colour picker under the final swatch: colour square, hue, screen eyedropper, hex */
-.cpick {
-  position: absolute; left: 5px; right: 5px; top: calc(100% - 4px); z-index: 30; display: grid; gap: 10px; padding: 10px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
-}
-.cpick[hidden] { display: none; }
-.cpSV { position: relative; height: 150px; border-radius: 5px; cursor: crosshair; touch-action: none; }
-.cpHue {
-  position: relative; flex: 1; height: 12px; border-radius: 6px; cursor: ew-resize; touch-action: none;
-  background: linear-gradient(to right, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00);
-}
-.cpKnob {
-  position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; pointer-events: none;
-  border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.4), 0 1px 3px rgb(0 0 0 / 0.4);
-}
-.cpHue .cpKnob { top: 50%; }
-.cpRow { display: flex; align-items: center; gap: 8px; }
-.cpDrop {
-  width: 28px; height: 28px; flex: none; padding: 0; border-radius: 6px; border: 1px solid var(--line); background: var(--sunken);
-  color: var(--fg); cursor: pointer; display: grid; place-items: center;
-}
-.cpDrop:hover { border-color: var(--muted); }
-.cpDrop svg { width: 14px; height: 14px; }
-.cpHex {
-  font-family: var(--font-num); font-size: 10px; width: 100%; min-width: 0; padding: 4px 6px;
-  border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg);
-}
-.cpHex.bad { border-color: var(--fg); border-style: dashed; }
-.cpDot { width: 22px; height: 22px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15); }
-.swatch.pick { cursor: pointer; }
-.swatch input[type=color] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
-.swatchLabel { position: absolute; right: 7px; bottom: 5px; font-size: 8.5px; color: rgb(255 255 255 / 0.85); font-family: var(--font-num); pointer-events: none; text-shadow: 0 0 3px rgb(0 0 0 / 0.35); }
+/* the colour itself */
+.swatch { height: 64px; border-radius: 5px; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06); }
 
-/* value rows */
-.rows { display: grid; gap: 6px; }
-.row { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; align-items: center; gap: 6px; }
-.row .lab { font-size: 8.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
-.row.float { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
-.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-.fields.one { grid-template-columns: minmax(0, 1fr); }
-input.v {
-  font-family: var(--font-num); font-size: 10px; font-variant-numeric: tabular-nums; width: 100%; min-width: 0;
-  padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--fg);
+/* a section's parts stay close together */
+.group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.bar { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+.grow { flex: 1; }
+.lab { color: var(--muted); white-space: nowrap; font-size: 10px; }
+/* number and text boxes: a soft fill, no border */
+.num, .txt {
+  font-family: var(--font-num); font-size: 10px; font-variant-numeric: tabular-nums; height: 24px; min-width: 0;
+  padding: 0 6px; background: var(--sunken); color: var(--fg); border: 0; border-radius: 4px; outline: none;
 }
-input.v.scrub:not(:focus) { cursor: ew-resize; }
-input.v:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
-.panel.isOut input.v:not(:focus) { background: var(--sunken); border-color: transparent; }
-input.v.bad { border-color: var(--fg); border-style: dashed; }
-input.v.na { color: var(--faint); }
+.num:focus, .txt:focus { box-shadow: inset 0 -2px 0 var(--fg); }
+.txt { width: 76px; text-transform: uppercase; }
+.num { width: 58px; text-align: right; }
+.num.scrub:not(:focus) { cursor: ew-resize; }
+.num.na, .txt.na { color: var(--faint); }
+.bad { box-shadow: inset 0 0 0 1px var(--fg) !important; }
+.panel.isOut .num:not(:focus), .panel.isOut .txt:not(:focus) { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
 body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
-.copy {
-  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--faint);
-  cursor: pointer; display: grid; place-items: center;
+button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
+.icon {
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted);
+  cursor: pointer; display: inline-grid; place-items: center; flex: none;
 }
-.copy svg { width: 12px; height: 12px; }
-.copy:hover { color: var(--fg); background: var(--sunken); }
-.copy.done { color: var(--fg); }
+.icon svg { width: 14px; height: 14px; }
+.icon:hover { color: var(--fg); background: var(--sunken); }
+.icon.done { color: var(--fg); }
+
+/* tabs: words, the chosen one underlined */
+.tabs { display: flex; gap: 2px; }
+.tabs button {
+  font: inherit; font-size: 10px; background: none; border: 0; border-bottom: 2px solid transparent; padding: 3px 7px 4px;
+  color: var(--muted); cursor: pointer;
+}
+.tabs button:hover { color: var(--fg); }
+.tabs button.on { color: var(--fg); border-bottom-color: var(--fg); }
+
+/* sliders: the track shows what each position gives */
+.sliders { display: grid; gap: 8px; }
+.srow { display: flex; align-items: center; gap: 8px; }
+.srow .lab { width: 10px; }
+.slider { position: relative; flex: 1; height: 16px; cursor: pointer; touch-action: none; }
+.slider .track { position: absolute; inset: 4px 0; border-radius: 3px; }
+.slider .knob {
+  position: absolute; top: 0; width: 9px; height: 16px; margin-left: -4.5px; border-radius: 3px; border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6); pointer-events: none;
+}
+.slider.na .knob { display: none; }
+.raw { display: flex; align-items: center; gap: 6px; }
+.raw .lab { flex: 0 0 auto; margin-right: 4px; }
+.raw .num { flex: 1 1 0; width: auto; padding: 0 4px; }
+
+/* room for one two-line note is kept free under the values, so the window doesn't resize when it comes or
+   goes. A longer note, or two at once, still makes the window grow. */
+.notes { display: grid; gap: 8px; align-content: start; min-height: 40px; }
 
 /* notes under the values: grey, told apart by their mark */
 .chip {
@@ -216,15 +224,29 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
 }
 .mk.ok { background: transparent; color: var(--muted); border: 1px solid var(--muted); width: 9px; height: 9px; line-height: 9px; font-size: 7px; }
 
+/* recent colours: one row of 8 under everything; empty places are dashed */
+.recent { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.recent button, .recent span { height: 22px; border-radius: 4px; }
+.recent button { border: 0; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06); }
+.recent button:hover { box-shadow: 0 0 0 1px var(--muted); }
+.recent span { border: 1px dashed var(--line); }
+
+/* shortcut settings in the gear menu */
+.hkRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 6px; font-size: 10px; }
+.hkRow input { margin: 0; accent-color: var(--fg); }
+.hkKeys { font-family: var(--font-num); min-width: 96px; text-align: center; }
+.hkKeys.on { border-color: var(--fg); }
+
 @media (max-width: 560px) {
   .bench { grid-template-columns: minmax(0, 1fr); }
+  .divider { height: 1px; }
   .cfgName { max-width: 120px; }
 }
 </style>
 
 <div class="wrap">
   <header>
-    <div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="9" r="4"/><path d="M32 13 V15"/><circle cx="32" cy="37" r="22"/><circle cx="32" cy="37" r="12"/><path d="M14 51 L50 23"/><path d="M17 45 L21 50 M43 24 L47 29"/></g><circle cx="32" cy="37" r="3.4" fill="currentColor"/></svg><span>ASTROLABE</span></div>
+    <div class="brand"><svg viewBox="3297.6 1593.4 626.8 626.8" aria-hidden="true"><path fill="currentColor" d="M3653.35,1720.21v-18.34h-21.23c-1.92,0-2.54-2.65-.77-3.43,15.38-6.92,23.25-23.07,23.25-50.49,0-38.02-15.35-54.5-44.72-54.5-29.22.01-44.45,16.49-44.45,54.51,0,27.82,8.04,44.04,23.78,50.79h0c1.64.69,1.15,3.12-.64,3.12h-21.91v18.71c-117.85,21-207.32,123.99-207.32,247.87,0,139.06,112.73,251.79,251.79,251.79s251.79-112.73,251.79-251.79c0-124.66-90.61-228.15-209.55-248.24ZM3820.44,1911.67c-33.34,80.86-109.97,134.9-198.18,138.72v-46.22c5.27-1.81,10.22-4.81,14.42-9.01,10.22-10.22,13.35-24.83,9.41-37.75l62.07-62.07c18.54-18.54,33.63-40.24,44.56-64.08h0c1.62-3.53-2.02-7.16-5.55-5.55h0c-23.84,10.93-45.54,26.01-64.08,44.56l-29.96,29.96c-.14-13.9-2.85-27.45-8.06-40.3-5.3-13.06-12.97-24.83-22.81-35.03v-73.01c95.18,4.82,174.15,71.01,198.18,159.78ZM3542.92,1990.4c-23.77,0-46.12-9.26-62.93-26.07-16.81-16.81-26.07-39.16-26.07-62.93s9.26-46.12,26.07-62.93c17.35-17.35,40.14-26.03,62.93-26.03s45.58,8.68,62.93,26.03c23.28,23.28,30.92,56.34,22.96,86.07l-7.79,7.79c-12.92-3.94-27.53-.8-37.75,9.41s-13.35,24.83-9.41,37.75l-7.88,7.88c-7.43,1.98-15.16,3.02-23.06,3.02ZM3609.91,1627.02c10.27,0,16.64,4.66,16.64,20.92s-6.27,20.92-16.64,20.92-16.45-4.66-16.45-20.92,6.28-20.92,16.45-20.92ZM3394.27,1968.45c0-116.79,92.34-212,207.99-216.65v56.69c-5.64-3.61-11.6-6.7-17.86-9.24-13.21-5.36-27.16-8.07-41.47-8.07s-28.27,2.72-41.47,8.07c-13.68,5.55-25.94,13.69-36.46,24.21-10.52,10.52-18.67,22.79-24.21,36.46-5.36,13.21-8.07,27.16-8.07,41.47s2.72,28.27,8.07,41.47c5.55,13.68,13.69,25.94,24.21,36.46,10.52,10.52,22.79,18.67,36.46,24.21,12.84,5.21,26.4,7.91,40.3,8.06l-70.79,70.79c-3.54,3.54-3.52,9.29.05,12.8l12.42,12.22c3.53,3.47,9.2,3.45,12.7-.05l102.8-102.8c1.1.33,2.21.62,3.33.85v179.68c-115.65-4.65-207.99-99.86-207.99-216.65ZM3622.26,2185.01v-114.6c49.79-1.98,96.95-18.7,136.95-48.68,27.62-20.7,50.66-47.27,67.42-77.27.87,7.88,1.33,15.88,1.33,23.99,0,116.02-91.12,210.76-205.7,216.56Z"/></svg><span>ASTROLABE</span></div>
     <div class="tools">
       <button class="cfgName" id="cfgName" type="button" title="Colour config in use. Click to change it."></button>
       <div class="tip menu" id="cfgTip">
@@ -241,18 +263,16 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
             <button class="btn" id="cfgFolderBtn" type="button" hidden>Pick its folder…</button>
           </div>
           <p class="cfgStatus" id="cfgStatus" role="status"></p>
+          <div id="hkBox" hidden>
+            <p class="menuHead">Window</p>
+            <label class="hkRow"><span>Always on top of other apps</span><input type="checkbox" id="hkTop"></label>
+            <p class="menuHead">Shortcut</p>
+            <div class="hkRow"><span>Pick a colour from anywhere</span><button class="btn hkKeys" id="hkKeys" type="button" title="Click, then press the new keys"></button></div>
+            <label class="hkRow"><span>Start with Windows, so the shortcut always works</span><input type="checkbox" id="hkAuto"></label>
+            <p class="cfgStatus" id="hkStatus" role="status"></p>
+          </div>
           <input type="file" id="cfgFile" accept=".ocio" hidden>
           <input type="file" id="cfgFolder" webkitdirectory multiple hidden>
-        </div></div>
-      </div>
-      <div class="tip narrow" id="dragTip">
-        <button class="tipBtn" type="button" aria-label="How to drag values" aria-describedby="dragPop">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>
-        </button>
-        <div class="tipPop" id="dragPop" role="tooltip"><div class="tipBody">
-          <p>Drag any number box left or right to change it.</p>
-          <p><kbd>Shift</kbd> 10× faster &nbsp; <kbd>Ctrl</kbd> 10× finer</p>
-          <p class="muted">Click a box to type in it. Works on both sides; the side you changed last drives the other.</p>
         </div></div>
       </div>
       <div class="tip" id="helpTip">
@@ -262,12 +282,19 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
           <ol class="steps">
             <li>In <b>Output</b>, pick the colour space of the final file (for example sRGB or Rec.709) and the colour it must have.</li>
             <li>In <b>Input</b>, pick the colour space your app works in (for example ACEScg).</li>
-            <li><b>Input</b> now shows the values to type into your app. The note with a <span class="mk ok">✓</span> confirms they land on your colour.</li>
+            <li><b>Input</b> now shows the values to type into your app. If they can't land exactly on your colour, a note says so.</li>
           </ol>
+          <p><b>Changing values.</b> Drag any number box left or right to change it (<kbd>Shift</kbd> 10× faster, <kbd>Ctrl</kbd> 10× finer), or click it to type. Both sides work: the side you changed last drives the other.</p>
           <p><b>Warnings.</b> Notes with a <span class="mk">!</span> appear when a value falls outside its colour space (display values below 0 or above 1.0, linear values below 0) or would clip in the final file.</p>
+          <p id="hkHelp" hidden></p>
           <div class="chain" id="chain"></div>
           <p class="muted">Built on OpenColorIO and ACES maths (OpenColorIO Project; A.M.P.A.S.). Licences are in the README next to the app.</p>
         </div></div>
+      </div>
+      <!-- window buttons (the app has no Windows title bar): shown while the mouse is over the window -->
+      <div class="winCtl" id="winCtl" hidden>
+        <button class="icon" type="button" data-win="min" title="Minimise" aria-label="Minimise"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 12h12"/></svg></button>
+        <button class="icon" type="button" data-win="close" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
       </div>
     </div>
   </header>
@@ -275,45 +302,53 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
   <div class="bench" id="bench">
     <section class="panel" id="expPanel" aria-label="Output">
       <div class="head">
-        <div class="titleRow"><h2>Output</h2><span class="role" id="e-role">You set</span></div>
-        <select id="out" class="spaceSel" aria-label="Output of the final file" title="Output of the final file"></select>
-        <div class="spaceNote" id="e-note" hidden></div>
+        <h2>Output</h2>
+        <select id="out" class="spaceSel" aria-label="Colour space of the final file" title="Colour space of the final file"></select>
       </div>
-      <div class="swatchFrame">
-        <button class="swatch pick" id="e-swatch" type="button" title="Pick a colour" aria-label="Pick the final colour" aria-haspopup="dialog" aria-expanded="false"><span class="swatchLabel" id="e-swlabel"></span></button>
-        <!-- our own colour picker (the browser's one has an eyedropper that can't see outside the app) -->
-        <div class="cpick" id="cpick" role="dialog" aria-label="Colour picker" hidden>
-          <div class="cpSV" id="cpSV" aria-label="Saturation and brightness"><div class="cpKnob" id="cpSVKnob"></div></div>
-          <div class="cpRow">
-            <button class="cpDrop" id="cpDrop" type="button" title="Pick a colour from anywhere on screen" aria-label="Pick a colour from anywhere on screen" hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5l4 4"/><path d="M17.6 2.9a2.1 2.1 0 0 1 3 3L18.5 8l-2.5-2.5z"/><path d="M16 6.5L6.6 15.9 5 21l5.1-1.6 9.4-9.4"/></svg>
-            </button>
-            <span class="cpDot" id="cpDot"></span>
-            <div class="cpHue" id="cpHue" aria-label="Hue"><div class="cpKnob" id="cpHueKnob"></div></div>
-          </div>
-          <input class="cpHex" id="cpHex" spellcheck="false" autocomplete="off" aria-label="Hex">
+      <div class="group">
+        <div class="swatch" id="e-swatch"></div>
+        <div class="bar">
+          <button class="icon" id="e-drop" type="button" hidden title="Pick a colour from anywhere on screen" aria-label="Pick a colour from anywhere on screen">
+            <!-- pipette, the same as the After Effects panel: solid bulb and collar, glass tube in outline -->
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(45 12 12)"><rect x="9.5" y="1.5" width="5" height="7" rx="2.5" fill="currentColor" stroke="none"/><rect x="8" y="8.5" width="8" height="2.2" rx="1" fill="currentColor" stroke="none"/><path d="M10.6 11.3V18.5L12 22L13.4 18.5V11.3"/></g></svg>
+          </button>
+          <span class="grow"></span>
+          <label class="lab" for="e-hex">#</label>
+          <input class="txt" id="e-hex" spellcheck="false" autocomplete="off" maxlength="7" aria-label="Hex">
+          <button class="icon copy" type="button" data-copy="e-hex" title="Copy hex" aria-label="Copy hex"></button>
         </div>
       </div>
-      <div class="rows" id="e-rows"></div>
-      <div class="chip" id="e-warn" role="status"></div>
+      <div class="group" id="e-model"></div>
+      <div class="notes"><div class="chip" id="e-warn" role="status"></div></div>
     </section>
+
+    <div class="divider" aria-hidden="true"></div>
 
     <section class="panel" id="aePanel" aria-label="Input">
       <div class="head">
-        <div class="titleRow"><h2>Input</h2><span class="role" id="a-role">Result</span></div>
-        <select id="interp" class="spaceSel" aria-label="Colour profile of the value you type" title="Colour profile of the value you type"></select>
-        <div class="spaceNote" id="a-note" hidden></div>
+        <h2>Input</h2>
+        <select id="interp" class="spaceSel" aria-label="Colour space of the value you type" title="Colour space of the value you type"></select>
       </div>
-      <div class="swatchFrame">
-        <div class="swatch" id="a-swatch"><span class="swatchLabel" id="a-swlabel"></span></div>
+      <div class="group">
+        <div class="swatch" id="a-swatch"></div>
+        <div class="bar" id="a-hexbar">
+          <span class="grow"></span>
+          <label class="lab" for="a-hex">#</label>
+          <input class="txt" id="a-hex" spellcheck="false" autocomplete="off" maxlength="7" aria-label="Hex">
+          <button class="icon copy" type="button" data-copy="a-hex" title="Copy hex" aria-label="Copy hex"></button>
+        </div>
       </div>
-      <div class="rows" id="a-rows"></div>
-      <div class="chip" id="a-chip"></div>
-      <div class="chip" id="a-warn" role="status"></div>
-      <div class="chip warn show" id="a-range" hidden>Above 1.0 doesn't fit in hex or HSL. Work in 32-bit float and type the Float values.</div>
+      <div class="group" id="a-model"></div>
+      <div class="notes">
+        <div class="chip" id="a-chip"></div>
+        <div class="chip" id="a-warn" role="status"></div>
+        <div class="chip warn show" id="a-range" hidden>Above 1.0 doesn't fit in hex or HSL. Work in 32-bit float and type the Float values.</div>
+      </div>
     </section>
   </div>
 
+  <!-- the last 8 Output colours, newest first: click one to use it again -->
+  <div class="recent" id="recent" role="group" aria-label="Recent colours"></div>
 </div>
 
 <script>
@@ -539,90 +574,187 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     }
   } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ src: state.src, exp: state.exp, ae: state.ae, sel: state.sel })); } catch (e) {} };
+
+  // --- recent colours: the Output colour (as in the final file), kept once it stays put for a moment ---
+  const RECENT_KEY = 'astrolabe-recent-v1', RECENT_MAX = 8;
+  let recent = [];
+  try { recent = (JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') || []).filter((h) => typeof h === 'string' && parseHex(h)).slice(0, RECENT_MAX); } catch (e) {}
+  let recentTimer;
+  function paintRecent() {
+    let html = '';
+    for (let i = 0; i < RECENT_MAX; i++) {
+      const h = recent[i];
+      html += h ? '<button type="button" data-hex="' + h + '" style="background:' + h + '" title="' + h + '" aria-label="Use ' + h + '"></button>' : '<span></span>';
+    }
+    $('recent').innerHTML = html;
+  }
+  function remember(hex) {
+    clearTimeout(recentTimer);
+    if (!hex || !parseHex(hex)) return;
+    hex = hex.toUpperCase();
+    if (recent[0] === hex) return;
+    recent = [hex].concat(recent.filter((h) => h !== hex)).slice(0, RECENT_MAX);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch (e) {}
+    paintRecent();
+  }
+  // after an edit: wait until the colour settles, so dragging a slider keeps one colour, not every step
+  const rememberSoon = () => { clearTimeout(recentTimer); recentTimer = setTimeout(() => { if (state.exp && state.exp.every(Number.isFinite)) remember(hexOf(state.exp)); }, 1500); };
+  paintRecent();
+  $('recent').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hex]');
+    if (!b) return;
+    setColour('e', parseHex(b.dataset.hex));
+    clearTimeout(recentTimer); // using a recent colour doesn't reorder the row
+  });
   let model = BUILTIN;
-  const cp = { h: 0, s: 0, v: 0, drag: false }; // the colour picker's own hue/saturation/value
   let modelError = ''; // the selected profile/output pair can't be computed
 
   const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
   const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-  // --- the value rows, the same set on both panels ---
-  function rowsHTML(p, ext) {
-    const big = ext ? 'Infinity' : null;
-    const f = (g, i, label, o) =>
-      '<input class="v scrub" id="' + p + '-' + g + '-' + i + '" inputmode="decimal" aria-label="' + label + '"' +
-      ' data-step="' + o.step + '" data-min="' + o.min + '" data-max="' + o.max + '"' + (o.wrap ? ' data-wrap="' + o.wrap + '"' : '') +
-      ' data-dec="' + o.dec + '"' + (o.rel ? ' data-rel="1"' : '') + '>';
-    const row = (g, lab, inner, cls) =>
-      '<div class="row' + (cls ? ' ' + cls : '') + '"><span class="lab">' + lab + '</span>' + inner +
-      '<button class="copy" type="button" aria-label="Copy" title="Copy" data-copy="' + p + '-' + g + '">' + COPY_ICON + '</button></div>';
-    const tri = (g, labels, specs) => '<div class="fields">' + labels.map((l, i) => f(g, i, l, specs[i])).join('') + '</div>';
-    const ch = { step: 1, min: 0, max: big || 255, dec: 0 };
-    const hue = { step: 1, min: 0, max: 360, wrap: 360, dec: 0 };
-    const pct = { step: 0.5, min: 0, max: 100, dec: 1 };
-    const pctV = { step: 0.5, min: 0, max: big || 100, dec: 1, rel: ext };
-    const flt = { step: 0.002, min: ext ? -Infinity : 0, max: big || 1, dec: 4, rel: ext };
-    return [
-      row('hex', 'Hex', '<div class="fields one"><input class="v" id="' + p + '-hex-0" spellcheck="false" autocomplete="off" aria-label="Hex"></div>'),
-      row('rgb', 'RGB', tri('rgb', ['Red 0 to 255', 'Green 0 to 255', 'Blue 0 to 255'], [ch, ch, ch])),
-      row('hsl', 'HSL', tri('hsl', ['HSL hue degrees', 'HSL saturation percent', 'HSL lightness percent'], [hue, pct, pct])),
-      row('hsv', 'HSV', tri('hsv', ['HSV hue degrees', 'HSV saturation percent', 'HSV value percent'], [hue, pct, pctV])),
-      row('flt', 'Float', tri('flt', ['Red float', 'Green float', 'Blue float'], [flt, flt, flt]), 'float'),
-    ].join('');
-  }
-  $('e-rows').innerHTML = rowsHTML('e', false);
-  $('a-rows').innerHTML = rowsHTML('a', true);
-  const GROUPS = ['hex', 'rgb', 'hsl', 'hsv', 'flt'];
-  const ids = (p, g) => (g === 'hex' ? [p + '-hex-0'] : [0, 1, 2].map((i) => p + '-' + g + '-' + i));
-  const groupOf = (id) => id.slice(0, id.lastIndexOf('-')); // e.g. "e-rgb"
+  // --- the values of each panel: hex, a tab of three gradient sliders (RGB, HSL or HSV), and Float ---
+  const TABS = ['rgb', 'hsl', 'hsv'];
+  const PAN = { e: { tab: 'rgb', hue: 0 }, a: { tab: 'rgb', hue: 0 } };
+  try { const t = JSON.parse(localStorage.getItem('astrolabe-tabs') || '{}'); for (const p of ['e', 'a']) if (TABS.includes(t[p])) PAN[p].tab = t[p]; } catch (e) {}
+  const saveTabs = () => { try { localStorage.setItem('astrolabe-tabs', JSON.stringify({ e: PAN.e.tab, a: PAN.a.tab })); } catch (e) {} };
+  const copyText = {};
 
   const sel = () => state.sel[model.key];
   const curInput = () => model.inputs(sel().out).find((x) => x.id === sel().interp) || model.inputs(sel().out)[0];
-
-  // read one group of fields as 0..1 floats (extended panels may go past 1)
-  function readGroup(p, g) {
-    const ext = p === 'a' && curInput().ext;
-    const vals = ids(p, g).map((i) => num($(i).value));
-    if (g === 'hex') return parseHex($(p + '-hex-0').value);
-    if (vals.includes(null)) return null;
-    if (g === 'rgb') return vals.map((x) => (ext ? Math.max(0, x) : clamp(x, 0, 255)) / 255);
-    if (g === 'hsl') return hslToRgb([vals[0], clamp(vals[1], 0, 100), clamp(vals[2], 0, 100)]);
-    if (g === 'hsv') return hsvToRgb([vals[0], clamp(vals[1], 0, 100), ext ? Math.max(0, vals[2]) : clamp(vals[2], 0, 100)]);
-    return ext ? vals : vals.map((x) => clamp(x, 0, 1));
+  const ext = (p) => p === 'a' && curInput().ext; // the Input may go past 1.0 (linear values)
+  // the Input is in a float colour space (scene-linear or log, like ACEScg): shown and typed as floats, no hex
+  const floaty = (p) => p === 'a' && curInput().kind !== 'display';
+  const colourOf = (p) => (p === 'e' ? state.exp : state.ae);
+  // what a value looks like in the final file: the Output is the final colour, an Input value goes through the config
+  const screenOf = (p, c) => {
+    if (p === 'e') return c;
+    try { const s = sel(); return model.final(s.interp, s.out, c); } catch (e) { return null; }
+  };
+  function setColour(p, c) {
+    if (!c || !c.every(Number.isFinite)) return;
+    state.src = p; // whichever panel you edit drives the other one
+    if (p === 'e') state.exp = c; else state.ae = c;
+    render();
+    rememberSoon();
   }
+  // hue is kept per panel, so a grey doesn't jump back to red
+  const hsvOf = (p, c) => { const v = rgbToHsv(c); if (v[1] < 0.5 || v[2] < 0.5) v[0] = PAN[p].hue; return v; };
+  const hslOf = (p, c) => { const v = rgbToHsl(c); if (v[1] < 0.5 || v[2] < 0.5 || v[2] > 99.5) v[0] = PAN[p].hue; return v; };
+  const setHue = (p, h) => { PAN[p].hue = ((h % 360) + 360) % 360; return PAN[p].hue; };
 
-  // fill one panel's fields from 0..1 floats
-  const copyText = {};
-  function fillPanel(p, c, skipGroup) {
-    if (!c) {
-      for (const g of GROUPS) ids(p, g).forEach((id) => { if (p + '-' + g !== skipGroup) { $(id).value = '—'; $(id).classList.add('na'); } });
-      for (const g of GROUPS) copyText[p + '-' + g] = '';
-      return false;
+  // the three rows of the chosen tab: t = slider position 0..1, num = the number shown
+  function rowsFor(p) {
+    const big = ext(p);
+    const tab = PAN[p].tab;
+    if (tab === 'rgb' && floaty(p)) {
+      // linear and log spaces (ACEScg and the like) work in 32-bit float: RGB shows the float values
+      return [0, 1, 2].map((i) => ({
+        label: 'RGB'[i], valid: () => true, stops: 8,
+        t: (c) => clamp(c[i], 0, 1),
+        fromT: (c, t) => { const v = c.slice(); v[i] = t; return v; },
+        num: (c) => c[i],
+        fromNum: (c, n) => { const v = c.slice(); v[i] = n; return v; },
+        dec: 4, step: 0.002, min: -Infinity, max: Infinity, rel: true,
+      }));
     }
-    const ok = inRange(c);
-    const hsl = rgbToHsl(c), hsv = rgbToHsv(c);
-    const text = {
-      hex: ok ? [hexOf(c)] : ['—'],
-      rgb: c.map((v) => fmt0(Math.max(0, v) * 255)),
-      hsl: ok ? hsl.map(fmt0) : ['—', '—', '—'],
-      hsv: hsv.map(fmt0),
-      flt: c.map((v) => fmt(v)),
-    };
-    for (const g of GROUPS) {
-      ids(p, g).forEach((id, i) => {
-        const el = $(id);
-        if (p + '-' + g === skipGroup) return; // don't overwrite the fields being typed in or dragged
-        el.value = text[g][i];
-        el.classList.remove('bad');
-        el.classList.toggle('na', text[g][i] === '—');
-      });
+    if (tab === 'rgb') {
+      return [0, 1, 2].map((i) => ({
+        label: 'RGB'[i], valid: () => true, stops: 8,
+        t: (c) => clamp(c[i], 0, 1),
+        fromT: (c, t) => { const v = c.slice(); v[i] = t; return v; },
+        num: (c) => Math.max(0, c[i]) * 255,
+        fromNum: (c, n) => { const v = c.slice(); v[i] = (big ? Math.max(0, n) : clamp(n, 0, 255)) / 255; return v; },
+        dec: 0, step: 1, min: 0, max: big ? Infinity : 255, rel: big,
+      }));
     }
+    const isHsl = tab === 'hsl';
+    const of = (c) => (isHsl ? hslOf(p, c) : hsvOf(p, c));
+    const to = (v) => (isHsl ? hslToRgb(v) : hsvToRgb(v));
+    const third = isHsl ? 'L' : 'V';
+    return [
+      {
+        label: 'H', stops: 12, valid: (c) => !isHsl || inRange(c),
+        t: (c) => of(c)[0] / 360,
+        fromT: (c, t, keep) => { const v = of(c); v[0] = keep ? t * 360 : setHue(p, Math.min(t * 360, 359.9)); return to(v); },
+        num: (c) => of(c)[0],
+        fromNum: (c, n) => { const v = of(c); v[0] = setHue(p, n); return to(v); },
+        dec: 0, step: 1, min: -Infinity, max: Infinity, wrap: 360,
+      },
+      {
+        label: 'S', stops: 8, valid: (c) => !isHsl || inRange(c),
+        t: (c) => clamp(of(c)[1] / 100, 0, 1),
+        fromT: (c, t) => { const v = of(c); v[1] = t * 100; return to(v); },
+        num: (c) => of(c)[1],
+        fromNum: (c, n) => { const v = of(c); v[1] = clamp(n, 0, 100); return to(v); },
+        dec: 0, step: 0.5, min: 0, max: 100,
+      },
+      {
+        label: third, stops: 8, valid: (c) => !isHsl || inRange(c),
+        t: (c) => clamp(of(c)[2] / 100, 0, 1),
+        fromT: (c, t) => { const v = of(c); v[2] = t * 100; return to(v); },
+        num: (c) => of(c)[2],
+        fromNum: (c, n) => { const v = of(c); v[2] = isHsl || !big ? clamp(n, 0, 100) : Math.max(0, n); return to(v); },
+        dec: 0, step: 0.5, min: 0, max: isHsl || !big ? 100 : Infinity, rel: !isHsl && big,
+      },
+    ];
+  }
+  const floatSpec = (p, i) => ({
+    get: () => colourOf(p)[i],
+    set: (n) => { const v = colourOf(p).slice(); v[i] = ext(p) ? n : clamp(n, 0, 1); setColour(p, v); },
+    dec: 4, step: 0.002, min: ext(p) ? -Infinity : 0, max: ext(p) ? Infinity : 1, rel: ext(p),
+  });
+
+  function buildModel(p) {
+    $(p + '-model').innerHTML =
+      '<div class="bar"><div class="tabs" role="tablist">' +
+      TABS.map((t) => '<button type="button" role="tab" data-tab="' + t + '">' + t.toUpperCase() + '</button>').join('') +
+      '</div><span class="grow"></span><button class="icon copy" type="button" data-copy="' + p + '-tab" title="Copy these values" aria-label="Copy these values"></button></div>' +
+      '<div class="sliders">' + [0, 1, 2].map((i) =>
+        '<div class="srow"><span class="lab" id="' + p + '-l' + i + '"></span>' +
+        '<div class="slider" id="' + p + '-s' + i + '"><div class="track"></div><div class="knob"></div></div>' +
+        '<input class="num scrub" id="' + p + '-n' + i + '" inputmode="decimal" spellcheck="false"></div>').join('') + '</div>' +
+      '<div class="raw" id="' + p + '-floatrow"><span class="lab">Float</span>' +
+      [0, 1, 2].map((i) => '<input class="num scrub" id="' + p + '-f' + i + '" inputmode="decimal" spellcheck="false" aria-label="' + 'RGB'[i] + ' float">').join('') +
+      '<button class="icon copy" type="button" data-copy="' + p + '-flt" title="Copy the float values" aria-label="Copy the float values"></button></div>';
+  }
+  buildModel('e');
+  buildModel('a');
+
+  // draw one panel from its colour (null: can't be calculated)
+  function paintPanel(p, c) {
+    $(p + '-model').querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === PAN[p].tab));
+    const ok = !!c && inRange(c);
+    if (c) { const v = rgbToHsv(c); if (v[1] >= 0.5 && v[2] >= 0.5) PAN[p].hue = v[0]; }
+    // float spaces: no hex, and the RGB tab already shows the floats
+    // not needed when RGB already shows the floats, but it keeps its space so the window keeps its size
+    $(p + '-floatrow').style.visibility = floaty(p) && PAN[p].tab === 'rgb' ? 'hidden' : '';
+    const hx = $(p + '-hex');
+    if (document.activeElement !== hx) { hx.value = ok ? hexOf(c).slice(1) : ''; hx.placeholder = '—'; hx.classList.remove('bad'); }
     copyText[p + '-hex'] = ok ? hexOf(c) : '';
-    copyText[p + '-rgb'] = 'rgb(' + text.rgb.join(', ') + ')';
-    copyText[p + '-hsl'] = ok ? 'hsl(' + text.hsl[0] + ', ' + text.hsl[1] + '%, ' + text.hsl[2] + '%)' : '';
-    copyText[p + '-hsv'] = 'hsv(' + text.hsv[0] + ', ' + text.hsv[1] + '%, ' + text.hsv[2] + '%)';
-    copyText[p + '-flt'] = text.flt.join(', ');
-    return ok;
+    const rows = rowsFor(p), shown = [];
+    rows.forEach((r, i) => {
+      $(p + '-l' + i).textContent = r.label;
+      $(p + '-n' + i).setAttribute('aria-label', r.label);
+      const sl = $(p + '-s' + i), box = $(p + '-n' + i), valid = !!c && r.valid(c);
+      sl.classList.toggle('na', !valid);
+      const track = sl.firstChild;
+      if (valid) {
+        const stops = [];
+        for (let k = 0; k <= r.stops; k++) { const s = screenOf(p, r.fromT(c, k / r.stops, true)); stops.push(s ? css(s) : 'transparent'); }
+        track.style.background = 'linear-gradient(to right,' + stops.join(',') + ')';
+        sl.lastChild.style.left = r.t(c) * 100 + '%';
+      } else track.style.background = 'var(--sunken)';
+      const text = !valid ? '—' : r.dec ? fmt(r.num(c), r.dec) : fmt0(r.num(c));
+      shown.push(text);
+      if (document.activeElement !== box) { box.value = text; box.classList.toggle('na', !valid); box.classList.remove('bad'); }
+    });
+    const tab = PAN[p].tab;
+    copyText[p + '-tab'] = !c || shown.includes('—') ? '' : tab === 'rgb' ? (floaty(p) ? shown.join(', ') : 'rgb(' + shown.join(', ') + ')') : tab + '(' + shown[0] + ', ' + shown[1] + '%, ' + shown[2] + '%)';
+    for (let i = 0; i < 3; i++) {
+      const box = $(p + '-f' + i);
+      if (document.activeElement !== box) { box.value = c ? fmt(c[i]) : '—'; box.classList.toggle('na', !c); box.classList.remove('bad'); }
+    }
+    copyText[p + '-flt'] = c ? c.map((v) => fmt(v)).join(', ') : '';
   }
 
   // the typed value as you'd actually type it: 0-255 for display numbers in range, else 4-decimal floats
@@ -663,13 +795,12 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     const expHex = exp ? hexOf(exp) : '';
 
     // final result panel
-    fillPanel('e', exp, skipGroup);
+    paintPanel('e', exp);
     $('e-swatch').style.background = exp ? css(exp) : 'transparent';
-    if (exp && !cp.drag) cpSync();
-    $('e-swlabel').textContent = expHex;
 
     // typed-value panel
-    const fits = fillPanel('a', ae, skipGroup);
+    paintPanel('a', ae);
+    const fits = !!ae && inRange(ae);
     $('expPanel').classList.toggle('isOut', !toAe);
     $('aePanel').classList.toggle('isOut', toAe);
 
@@ -697,7 +828,7 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
           aWarn = 'Outside the ' + g.space + ' gamut: ' + parts.join('; ') + '. The colour is more saturated than ' + g.space + ' can hold, so it may clip.';
         }
       }
-      $('a-range').hidden = fits || (disp && highA.length > 0);
+      $('a-range').hidden = fits || floaty('a') || (disp && highA.length > 0);
     } else $('a-range').hidden = true;
     setChip('a-warn', err ? err + ' Pick another colour profile or output.' : aWarn, 'warn');
 
@@ -715,19 +846,19 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     }
     setChip('e-warn', eWarn, 'warn');
     $('a-swatch').style.background = exp ? css(exp) : 'transparent';
-    $('a-swlabel').textContent = expHex;
 
     // double-check: run the numbers as you'd type them forward to the final file
     let note = '', cls = '';
     if (toAe && ae && !err) {
       const typedHex = hexOf(model.final(interp, out, asTyped(inp, ae)));
       const exactHex = hexOf(model.final(interp, out, ae));
-      const typedAs = inp.kind === 'display' && fits ? 'the hex or 0–255 values' : 'the Float values';
+      // when the value lands on the colour, there's nothing to say: notes only appear when something is off
       if (typedHex === expHex) {
-        note = 'Comes out as ' + expHex + ' when you type ' + typedAs + ': matches the final colour.';
-        cls = 'ok';
+        note = '';
       } else if (exactHex === expHex) {
-        note = 'The 0–255 values land on ' + typedHex + '. Type the Float values (32-bit float) to hit ' + expHex + ' exactly.';
+        note = floaty('a')
+          ? 'Rounded to 4 decimals these land on ' + typedHex + '. Copy the values to hit ' + expHex + ' exactly.'
+          : 'The 0–255 values land on ' + typedHex + '. Type the Float values (32-bit float) to hit ' + expHex + ' exactly.';
         cls = 'info';
       } else {
         note = 'The ' + model.look(out) + ' view can\'t produce this colour exactly. The closest it gets is ' + exactHex + '.';
@@ -737,9 +868,6 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     setChip('a-chip', note, cls);
 
     // header, roles, help text, render path
-    // small label: which side you set, which side is the result
-    $('e-role').innerHTML = toAe ? '<em>You set</em>' : 'Result';
-    $('a-role').innerHTML = toAe ? 'Result' : '<em>You set</em>';
     let steps = [];
     try { steps = model.steps(interp, out); } catch (e) { steps = []; }
     $('chain').innerHTML = steps.length ? 'Render path: ' + steps.map((s, i) => (i === 0 || i === steps.length - 1 ? '<b>' + esc(s) + '</b>' : esc(s))).join('  →  ') : '';
@@ -777,33 +905,18 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     await select({});
   }
 
-  // --- typing ---
-  function onEdit(id) {
-    const grp = groupOf(id), p = grp[0], g = grp.slice(2);
-    const v = readGroup(p, g);
-    if (!v) { $(id).classList.add('bad'); return; }
-    state.src = p; // whichever panel you edit drives the other one
-    if (p === 'e') state.exp = v; else state.ae = v;
-    render(grp);
-  }
-  document.querySelectorAll('input.v').forEach((el) => {
-    el.addEventListener('input', () => onEdit(el.id));
-    el.addEventListener('blur', () => { if (!document.body.classList.contains('scrubbing')) render(); });
-  });
-  // paste "0.18, 0.2, 0.3" into any typed-value float box
-  [0, 1, 2].forEach((i) => $('a-flt-' + i).addEventListener('paste', (e) => {
-    const t = (e.clipboardData || window.clipboardData).getData('text');
-    const parts = t.match(/-?\d*\.?\d+(?:e-?\d+)?/gi);
-    if (parts && parts.length >= 3) { e.preventDefault(); state.src = 'a'; state.ae = parts.slice(0, 3).map(Number); render(); }
-  }));
-
-  // --- drag a number box left/right to change it (mouse only, so touch still scrolls) ---
-  document.querySelectorAll('input.v.scrub').forEach((el) => {
+  // --- editing: sliders, number boxes (type, drag left/right, arrow keys), hex, tabs ---
+  // a number box; spec() gives get/set and its range at the moment you use it
+  function bindNum(el, spec) {
     let lastX = 0, cur = 0, dragging = false, active = false;
+    const fix = (o, v) => {
+      if (o.wrap) v = ((v % o.wrap) + o.wrap) % o.wrap;
+      return clamp(v, o.min, o.max);
+    };
     el.addEventListener('pointerdown', (e) => {
-      if (e.pointerType !== 'mouse' || e.button !== 0 || el.readOnly || document.activeElement === el) return;
+      if (e.pointerType !== 'mouse' || e.button !== 0 || document.activeElement === el || el.classList.contains('na')) return;
       active = true; dragging = false; lastX = e.clientX;
-      cur = num(el.value) ?? 0;
+      cur = spec().get();
       el.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
@@ -813,17 +926,12 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
       if (!dragging && Math.abs(dx) < 3) return;
       if (!dragging) { dragging = true; document.body.classList.add('scrubbing'); }
       lastX = e.clientX;
-      const d = el.dataset;
+      const o = spec();
       const speed = e.shiftKey ? 10 : e.ctrlKey || e.altKey ? 0.1 : 1;
-      let step = parseFloat(d.step);
-      if (d.rel) step = Math.max(step, Math.abs(cur) * 0.004); // bigger steps for big values
-      cur += dx * step * speed;
-      const wrap = parseFloat(d.wrap);
-      if (wrap) cur = ((cur % wrap) + wrap) % wrap;
-      cur = clamp(cur, parseFloat(d.min), parseFloat(d.max));
-      const dec = speed < 1 ? Math.max(1, +d.dec) + 1 : +d.dec;
-      el.value = String(+cur.toFixed(dec));
-      onEdit(el.id);
+      let step = o.step;
+      if (o.rel) step = Math.max(step, Math.abs(cur) * 0.004); // bigger steps for big values
+      cur = fix(o, cur + dx * step * speed);
+      o.set(cur);
     });
     const end = (e) => {
       if (!active) return;
@@ -834,59 +942,83 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
-  });
+    el.addEventListener('input', () => {
+      const n = num(el.value);
+      el.classList.toggle('bad', n === null);
+      if (n !== null) { const o = spec(); o.set(fix(o, n)); }
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') el.blur();
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const o = spec();
+        const k = (e.shiftKey ? 10 : e.ctrlKey ? 0.1 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+        o.set(fix(o, o.get() + o.step * k));
+        el.value = String(+o.get().toFixed(o.dec));
+      }
+    });
+    el.addEventListener('blur', () => { if (!document.body.classList.contains('scrubbing')) render(); });
+  }
+  // a gradient slider
+  function bindSlider(sl, onT) {
+    let on = false;
+    const t = (e) => { const r = sl.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1); };
+    sl.addEventListener('pointerdown', (e) => { if (e.button !== 0 || sl.classList.contains('na')) return; on = true; sl.setPointerCapture(e.pointerId); onT(t(e)); e.preventDefault(); });
+    sl.addEventListener('pointermove', (e) => { if (on) onT(t(e)); });
+    const up = (e) => { if (!on) return; on = false; if (sl.hasPointerCapture(e.pointerId)) sl.releasePointerCapture(e.pointerId); };
+    sl.addEventListener('pointerup', up);
+    sl.addEventListener('pointercancel', up);
+  }
+  for (const p of ['e', 'a']) {
+    for (let i = 0; i < 3; i++) {
+      bindSlider($(p + '-s' + i), (t) => { const c = colourOf(p); if (c) setColour(p, rowsFor(p)[i].fromT(c, t)); });
+      bindNum($(p + '-n' + i), () => {
+        const r = rowsFor(p)[i];
+        return { get: () => r.num(colourOf(p)), set: (n) => setColour(p, r.fromNum(colourOf(p), n)), dec: r.dec, step: r.step, min: r.min, max: r.max, wrap: r.wrap, rel: r.rel };
+      });
+      bindNum($(p + '-f' + i), () => floatSpec(p, i));
+    }
+    $(p + '-hex').addEventListener('input', (e) => {
+      const v = parseHex(e.target.value);
+      e.target.classList.toggle('bad', !v);
+      if (v) setColour(p, v);
+    });
+    $(p + '-hex').addEventListener('blur', () => render());
+    $(p + '-model').addEventListener('click', (e) => {
+      const b = e.target.closest('.tabs button');
+      if (!b) return;
+      PAN[p].tab = b.dataset.tab;
+      saveTabs();
+      render();
+    });
+  }
+  document.querySelectorAll('.copy').forEach((b) => { b.innerHTML = COPY_ICON; });
+  // paste "0.18, 0.2, 0.3" into any Input float box
+  [0, 1, 2].forEach((i) => $('a-f' + i).addEventListener('paste', (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData('text');
+    const parts = t.match(/-?\d*\.?\d+(?:e-?\d+)?/gi);
+    if (parts && parts.length >= 3) { e.preventDefault(); setColour('a', parts.slice(0, 3).map(Number)); }
+  }));
 
   // --- controls ---
-  // colour picker under the final swatch. h/s/v are kept here so the hue doesn't jump on greys.
-  function cpSync() {
-    const [h, s, v] = rgbToHsv(state.exp);
-    if (s > 0.5 && v > 0.5) cp.h = h;
-    cp.s = s / 100; cp.v = v / 100;
-    cpPaint();
+  // the app's own title bar: everything above the colour block moves the window (the top margin, the
+  // header row with the space around its buttons, and the gap below it), except the buttons themselves
+  if (HOST) {
+    document.body.classList.add('app');
+    $('winCtl').hidden = false;
+    document.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.clientY >= $('bench').getBoundingClientRect().top) return;
+      if (e.target.closest('button, a, input, select, .tipPop')) return;
+      e.preventDefault();
+      HOST.postMessage('drag');
+    });
+    $('winCtl').addEventListener('click', (e) => { const b = e.target.closest('[data-win]'); if (b) HOST.postMessage(b.dataset.win); });
   }
-  function cpPaint() {
-    $('cpSV').style.background = 'linear-gradient(to top, #000, rgb(0 0 0 / 0)), linear-gradient(to right, #fff, hsl(' + cp.h + ', 100%, 50%))';
-    $('cpSVKnob').style.left = cp.s * 100 + '%';
-    $('cpSVKnob').style.top = (1 - cp.v) * 100 + '%';
-    $('cpHueKnob').style.left = (cp.h / 360) * 100 + '%';
-    $('cpDot').style.background = css(state.exp);
-    if (document.activeElement !== $('cpHex')) { $('cpHex').value = hexOf(state.exp); $('cpHex').classList.remove('bad'); }
-  }
-  function cpSet() {
-    state.src = 'e';
-    state.exp = hsvToRgb([cp.h, cp.s * 100, cp.v * 100]).map((x) => Math.round(clamp(x, 0, 1) * 255) / 255); // a whole hex value
-    render();
-    cpPaint();
-  }
-  const cpOpen = (open) => {
-    $('cpick').hidden = !open;
-    $('e-swatch').setAttribute('aria-expanded', String(open));
-    if (open) cpSync();
-  };
-  $('e-swatch').addEventListener('click', () => cpOpen($('cpick').hidden));
-  document.addEventListener('click', (e) => { if (e.target.isConnected && !$('cpick').contains(e.target) && !$('e-swatch').contains(e.target)) cpOpen(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cpOpen(false); });
-  const cpDrag = (el, onMove) => {
-    const move = (e) => { const r = el.getBoundingClientRect(); onMove(clamp((e.clientX - r.left) / r.width, 0, 1), clamp((e.clientY - r.top) / r.height, 0, 1)); cpSet(); };
-    el.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; cp.drag = true; el.setPointerCapture(e.pointerId); move(e); e.preventDefault(); });
-    el.addEventListener('pointermove', (e) => { if (cp.drag && el.hasPointerCapture(e.pointerId)) move(e); });
-    const end = (e) => { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); cp.drag = false; };
-    el.addEventListener('pointerup', end);
-    el.addEventListener('pointercancel', end);
-  };
-  cpDrag($('cpSV'), (x, y) => { cp.s = x; cp.v = 1 - y; });
-  cpDrag($('cpHue'), (x) => { cp.h = Math.min(x * 360, 359.9); });
-  $('cpHex').addEventListener('input', (e) => {
-    const v = parseHex(e.target.value);
-    e.target.classList.toggle('bad', !v);
-    if (v) { state.src = 'e'; state.exp = v; render(); }
-  });
-  $('cpHex').addEventListener('blur', () => cpPaint());
   // eyedropper for the whole screen: the app does it itself; Chrome and Edge have one built in
-  const useHex = (hex) => { const v = hex && parseHex(hex); if (v) { state.src = 'e'; state.exp = v; render(); } };
-  if (HOST || window.EyeDropper) $('cpDrop').hidden = false;
+  const useHex = (hex) => { const v = hex && parseHex(hex); if (v) { setColour('e', v); remember(hexOf(v)); } };
+  if (HOST || window.EyeDropper) $('e-drop').hidden = false;
   if (HOST) HOST.addEventListener('message', (e) => { if (e.data && e.data.type === 'picked-color') useHex(e.data.hex); });
-  $('cpDrop').addEventListener('click', async () => {
+  $('e-drop').addEventListener('click', async () => {
     if (HOST) { HOST.postMessage('eyedropper'); return; }
     try { useHex((await new window.EyeDropper().open()).sRGBHex); } catch (err) {} // Esc cancels
   });
@@ -1020,6 +1152,29 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
   // close on a click outside (a button the menu just redrew is no longer in the page, but was inside)
   document.addEventListener('click', (e) => { if (e.target.isConnected && !menu.contains(e.target) && e.target !== $('cfgName')) setOpen(false); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+  // ...and when the mouse clearly moves away from it: more than 40 px from the menu and its buttons,
+  // or out of the window, for a moment. Not while it waits for something (new shortcut keys, a file dialog).
+  const menuHold = { keys: false, dialog: false };
+  const FAR = 40;
+  let awayTimer = null;
+  const away = (now) => {
+    if (!menu.classList.contains('open') || menuHold.keys || menuHold.dialog) { clearTimeout(awayTimer); awayTimer = null; return; }
+    if (now) { if (!awayTimer) awayTimer = setTimeout(() => { awayTimer = null; if (!menuHold.keys && !menuHold.dialog) setOpen(false); }, 300); }
+    else { clearTimeout(awayTimer); awayTimer = null; }
+  };
+  document.addEventListener('mousemove', (e) => {
+    if (!menu.classList.contains('open')) return;
+    const near = [$('cfgPop').firstElementChild, $('cfgBtn'), $('cfgName')].some((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width && e.clientX > r.left - FAR && e.clientX < r.right + FAR && e.clientY > r.top - FAR && e.clientY < r.bottom + FAR;
+    });
+    away(!near);
+  });
+  document.documentElement.addEventListener('mouseleave', () => away(true));
+  // the help (?) closes on a second click, and opens again once the mouse comes back
+  const helpTip = $('helpTip');
+  helpTip.querySelector('.tipBtn').addEventListener('click', (e) => { helpTip.classList.toggle('closed'); e.currentTarget.blur(); });
+  helpTip.addEventListener('mouseleave', () => helpTip.classList.remove('closed'));
   $('cfgDef').addEventListener('click', (e) => {
     const b = e.target.closest('[data-def]');
     if (!b) return;
@@ -1037,7 +1192,12 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     if (!p) { useBuiltin(); return; }
     if (HOST) loadConfig(p);
     else if (store.mem[p]) { memFiles = new Map(); loadConfig(p, store.mem[p]); }
-    else { status('Pick the file again: a browser can\'t reopen files by itself.'); $('cfgFile').click(); }
+    else {
+      status('Pick the file again: a browser can\'t reopen files by itself.');
+      menuHold.dialog = true;
+      window.addEventListener('focus', () => { menuHold.dialog = false; }, { once: true });
+      $('cfgFile').click();
+    }
   });
 
   // picking a config
@@ -1049,10 +1209,15 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     });
   }
   $('cfgLoad').addEventListener('click', async () => {
+    menuHold.dialog = true; // the file dialog sits outside the window: keep the menu open meanwhile
     if (HOST) {
       const path = await new Promise((res) => { pickResolve = res; HOST.postMessage('pick'); });
+      menuHold.dialog = false;
       if (path) loadConfig(path);
-    } else $('cfgFile').click();
+    } else {
+      window.addEventListener('focus', () => { menuHold.dialog = false; }, { once: true });
+      $('cfgFile').click();
+    }
   });
   $('cfgFile').addEventListener('change', async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -1062,7 +1227,11 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     memFiles = new Map([[norm(path), f]]);
     loadConfig(path, await f.text());
   });
-  $('cfgFolderBtn').addEventListener('click', () => $('cfgFolder').click());
+  $('cfgFolderBtn').addEventListener('click', () => {
+    menuHold.dialog = true;
+    window.addEventListener('focus', () => { menuHold.dialog = false; }, { once: true });
+    $('cfgFolder').click();
+  });
   $('cfgFolder').addEventListener('change', async (e) => {
     const files = [...(e.target.files || [])];
     e.target.value = '';
@@ -1073,6 +1242,49 @@ body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: no
     const f = configs.find((c) => c.name === want) || configs[0];
     loadConfig('/picked/' + (f.webkitRelativePath || f.name), await f.text());
   });
+
+  // ================================================================ shortcut (app only)
+  // The app keeps running in the tray and listens for a shortcut that starts the screen picker.
+  // The keys live in the app (settings.txt next to its files); this menu only shows and changes them.
+  if (HOST) {
+    let hk = { hotkey: '', hotkeyOk: true, autostart: true };
+    let capturing = false;
+    const hkPaint = (msg) => {
+      menuHold.keys = capturing;
+      $('hkKeys').textContent = capturing ? 'Press keys…' : hk.hotkey || 'None';
+      $('hkKeys').classList.toggle('on', capturing);
+      $('hkAuto').checked = !!hk.autostart;
+      $('hkTop').checked = !!hk.ontop;
+      $('hkStatus').textContent = msg != null ? msg : !hk.hotkeyOk && hk.hotkey ? hk.hotkey + ' is taken by another app. Pick other keys.' : '';
+      $('hkHelp').hidden = !hk.hotkey;
+      $('hkHelp').innerHTML = '<b>Shortcut.</b> ' + esc(hk.hotkey) + ' picks a colour from anywhere on screen, even with the window closed (ASTROLABE waits in the tray). Change the keys under the gear.';
+    };
+    const stopCapture = () => { if (!capturing) return; capturing = false; HOST.postMessage('hotkey-resume'); hkPaint(); };
+    $('hkBox').hidden = false;
+    HOST.addEventListener('message', (e) => { const d = e.data; if (d && d.type === 'settings') { hk = d; hkPaint(d.error || null); } });
+    HOST.postMessage('settings');
+    $('hkKeys').addEventListener('click', () => {
+      if (capturing) { stopCapture(); return; }
+      capturing = true;
+      HOST.postMessage('hotkey-pause'); // so pressing the current keys doesn't start the picker
+      hkPaint('Hold Win, Ctrl or Alt (Shift if you like) and press a letter, a number or an F key. Esc cancels.');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (!capturing) return;
+      if (!menu.classList.contains('open')) { stopCapture(); return; }
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Escape') { stopCapture(); return; }
+      const m = e.code.match(/^(?:Key([A-Z])|Digit(\d)|(F\d{1,2}))$/);
+      if (!m) return; // Ctrl, Alt or Shift on its own: keep waiting for the key
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) { hkPaint('Add Win, Ctrl or Alt, so the shortcut doesn\'t fire while you type.'); return; }
+      const keys = [e.metaKey && 'Win', e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean).concat(m[1] || m[2] || m[3]).join('+');
+      capturing = false;
+      HOST.postMessage('hotkey:' + keys); // the app answers with the new settings, or why it can't
+    }, true);
+    $('hkAuto').addEventListener('change', (e) => HOST.postMessage('autostart:' + (e.target.checked ? 1 : 0)));
+    $('hkTop').addEventListener('change', (e) => HOST.postMessage('ontop:' + (e.target.checked ? 1 : 0)));
+    menu.addEventListener('focusout', () => setTimeout(() => { if (!menu.classList.contains('open')) stopCapture(); }, 0));
+  }
 
   // start: the default config if one is set, else the config you used last
   (async () => {

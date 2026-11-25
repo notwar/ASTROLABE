@@ -22,6 +22,7 @@ The user guide is [app/README.md](app/README.md). This page is for building it.
 | `build.js` | Puts it all into one HTML file |
 | `native/` | The Windows exe: C# + WebView2, about 1 MB |
 | `app/` | User README, icon, and the old Edge-app installer |
+| `ae/` | ASTROLABE for After Effects: a colour panel (CEP) that uses the same `ocio.js`. Its own build, tests and installer: see [ae/README.md](ae/README.md) |
 | `ref*.py`, `*.json` | Reference values from OCIO itself, used by the tests |
 
 ## Build
@@ -32,6 +33,7 @@ Needs Node.js. The exe also needs Windows (it uses the C# compiler that ships wi
 node build.js                  # page only: app/ASTROLABE.html
 node native/build_native.js    # page + native/dist/ASTROLABE.exe
 node build.js --deploy         # copies exe, html and README to a shared folder
+node ae/build.js --dist        # After Effects panel: ae/dist/ASTROLABE_AE with its installer
 ```
 
 `--deploy` reads the folder from the first line of `deploy-path.txt`. That file is yours to create and stays out of git.
@@ -43,6 +45,8 @@ node test.js                   # built-in maths vs OCIO
 node ocio/test_engine.js       # OCIO engine vs 22 real configs
 node ocio/test_builtins.js     # every OCIO builtin transform
 node ocio/test_solver.js       # "what to type" solver on random colours
+node ae/tests/test_colour.js   # AE panel: picker maths and OCIO on AE's own configs
+node ae/tests/test_host.js     # AE panel: host script against a mock of AE
 ```
 
 The reference files come from PyOpenColorIO 2.5 (in Houdini 22.0.466's Python). Re-make them with `ref.py`, `rec709check.py`, `ocio/ref_configs.py` and `ocio/ref_builtins.py` run through hython.

@@ -17,3 +17,12 @@ __pycache__/
 .vscode/
 Thumbs.db
 desktop.ini
+
+# The sales site: kept on this PC, not in git for now
+site/
+
+# ASTROLABE for After Effects (ae/): build output and files ae/build.js copies or builds
+ae/dist/
+ae/extension/js/ocio.js
+ae/extension/js/builtins.js
+ae/extension/bin/

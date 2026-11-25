@@ -36,18 +36,34 @@ static class Program
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
-    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int RegisterWindowMessage(string name);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(uint pid);
 
+    // what a second start asks the running app to do
+    internal static readonly int WM_OPEN = RegisterWindowMessage("AntiStudio.ASTROLABE.Open");
+    internal static readonly int WM_PICK = RegisterWindowMessage("AntiStudio.ASTROLABE.Pick");
+
+    // ASTROLABE.exe             opens the window
+    // ASTROLABE.exe --pick      starts with the screen picker; the window opens once a colour is picked
+    // ASTROLABE.exe --background  waits in the tray (how Windows starts it at login)
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
-        // One window only: starting it again brings the open one to the front.
+        bool pick = Array.IndexOf(args, "--pick") >= 0, background = Array.IndexOf(args, "--background") >= 0;
+        // One app only: starting it again passes the request on to the one already running.
         bool first;
         var mutex = new Mutex(true, "AntiStudio.ASTROLABE", out first);
         if (!first)
         {
             IntPtr h = FindWindow(null, Title);
-            if (h != IntPtr.Zero) { if (IsIconic(h)) ShowWindow(h, 9); SetForegroundWindow(h); }
+            if (h != IntPtr.Zero && !background)
+            {
+                uint pid; GetWindowThreadProcessId(h, out pid);
+                AllowSetForegroundWindow(pid); // let it come to the front
+                PostMessage(h, pick ? WM_PICK : WM_OPEN, IntPtr.Zero, IntPtr.Zero);
+            }
             return;
         }
         try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch (Exception) { } // per-monitor v2: sharp on any scaling
@@ -63,16 +79,96 @@ static class Program
             return bytes == null ? null : Assembly.Load(bytes);
         };
         Extract("app.html", Path.Combine(Home, "app"));
+        LoadSettings();
+        ApplyAutoStart();
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Run();
+        Run(pick, background);
         GC.KeepAlive(mutex);
     }
 
     // Kept out of Main so WebView2 types are only touched after AssemblyResolve is set up.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    static void Run() { Application.Run(new MainForm()); }
+    static void Run(bool pick, bool background) { Application.Run(new MainForm(pick, background)); }
+
+    // --- settings: %LOCALAPPDATA%\ASTROLABE\settings.txt, one "name=value" per line ---
+    static readonly Dictionary<string, string> settings = new Dictionary<string, string>();
+    static string SettingsPath { get { return Path.Combine(Home, "settings.txt"); } }
+    static void LoadSettings()
+    {
+        try
+        {
+            if (!File.Exists(SettingsPath)) return;
+            foreach (string line in File.ReadAllLines(SettingsPath))
+            {
+                int i = line.IndexOf('=');
+                if (i > 0) settings[line.Substring(0, i).Trim()] = line.Substring(i + 1).Trim();
+            }
+        }
+        catch (Exception) { }
+    }
+    internal static string Setting(string name, string fallback) { string v; return settings.TryGetValue(name, out v) ? v : fallback; }
+    internal static void SetSetting(string name, string value)
+    {
+        settings[name] = value;
+        try
+        {
+            var b = new StringBuilder();
+            foreach (var kv in settings) b.Append(kv.Key).Append('=').Append(kv.Value).Append("\r\n");
+            File.WriteAllText(SettingsPath, b.ToString());
+        }
+        catch (Exception) { }
+    }
+
+    // Not Ctrl+Shift+C: that is After Effects' Pre-compose. Win+Shift+C is also PowerToys Color Picker's
+    // default: with that on, the gear menu says the keys are taken.
+    internal const string DefaultHotkey = "Win+Shift+C";
+    internal static string Hotkey { get { return Setting("hotkey", DefaultHotkey); } }
+
+    // Start with Windows (on unless turned off): a Run entry for this user that starts it in the tray.
+    // Written on every start, so it follows the exe if the exe moves.
+    internal static bool AutoStart { get { return Setting("autostart", "1") == "1"; } }
+    internal static bool OnTop { get { return Setting("ontop", "0") == "1"; } }
+    internal static void ApplyAutoStart()
+    {
+        try
+        {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
+            {
+                if (AutoStart) k.SetValue(Title, "\"" + Application.ExecutablePath + "\" --background");
+                else if (k.GetValue(Title) != null) k.DeleteValue(Title, false);
+            }
+        }
+        catch (Exception) { }
+    }
+
+    // "Win+Shift+C" -> modifier flags and key code for RegisterHotKey. Needs Ctrl, Alt or Win, and one
+    // letter, digit or F key.
+    internal static bool ParseHotkey(string s, out uint mods, out uint vk)
+    {
+        mods = 0; vk = 0;
+        if (string.IsNullOrEmpty(s)) return false;
+        foreach (string part in s.Split('+'))
+        {
+            string p = part.Trim();
+            switch (p.ToLowerInvariant())
+            {
+                case "ctrl": mods |= 2; break;
+                case "alt": mods |= 1; break;
+                case "shift": mods |= 4; break;
+                case "win": mods |= 8; break;
+                default:
+                    int n;
+                    if (vk != 0) return false;
+                    if (p.Length == 1 && char.IsLetterOrDigit(p[0]) && p[0] < 128) vk = char.ToUpperInvariant(p[0]);
+                    else if (p.Length > 1 && char.ToUpperInvariant(p[0]) == 'F' && int.TryParse(p.Substring(1), out n) && n >= 1 && n <= 24) vk = (uint)(0x6F + n);
+                    else return false;
+                    break;
+            }
+        }
+        return vk != 0 && (mods & 0xB) != 0;
+    }
 
     static byte[] Resource(string name)
     {
@@ -107,26 +203,192 @@ static class Program
 class MainForm : Form
 {
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool ReleaseCapture();
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
+    [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+    [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
 
     readonly WebView2 web;
+    readonly bool startHidden, pickAtStart;
+    bool firstShow = true, everShown, started, pageReady, quitting;
+    string pendingPick;          // a colour picked before the page had loaded
+    bool hotkeyOk;
+    NotifyIcon tray;
+    ToolStripMenuItem trayPick, trayAuto, trayTop;
 
-    public MainForm()
+    public MainForm(bool pick, bool background)
     {
+        startHidden = pick || background;
+        pickAtStart = pick;
         Text = Program.Title;
-        FormBorderStyle = FormBorderStyle.FixedSingle; // no resize border
+        // No Windows title bar (like PureRef): the page's header is the title bar, and its
+        // minimise/close buttons show while the mouse is over the window.
+        FormBorderStyle = FormBorderStyle.None;
         MaximizeBox = false;
         AutoScaleMode = AutoScaleMode.None;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Color.FromArgb(236, 238, 242);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
+        TopMost = Program.OnTop;
 
         web = new WebView2();
         web.Dock = DockStyle.Fill;
         web.DefaultBackgroundColor = BackColor;
         Controls.Add(web);
 
-        HandleCreated += (s, e) => SetCssClientSize(720, 600); // first guess; the page then asks for its exact size
-        Load += async (s, e) => await Init();
+        HandleCreated += (s, e) =>
+        {
+            SetCssClientSize(720, 600); // first guess; the page then asks for its exact size
+            int round = 2; // Windows 11: rounded corners like a normal window (ignored on Windows 10)
+            try { DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int)); } catch (Exception) { }
+            RegisterShortcut(Program.Hotkey);
+        };
+        HandleDestroyed += (s, e) => UnregisterHotKey(Handle, 1);
+        Load += (s, e) => Start();
+        MakeTray();
+    }
+
+    async void Start()
+    {
+        if (started) return;
+        started = true;
+        await Init();
+    }
+
+    // Started hidden (--pick or --background): make the window and its page, but don't show it yet.
+    protected override void SetVisibleCore(bool value)
+    {
+        if (firstShow && value && startHidden)
+        {
+            firstShow = false;
+            CreateHandle();
+            IntPtr h = web.Handle; // WebView2 needs its own window to start in
+            base.SetVisibleCore(false);
+            Start();
+            if (pickAtStart) BeginInvoke(new Action(PickScreenColor));
+            return;
+        }
+        firstShow = false;
+        base.SetVisibleCore(value);
+    }
+
+    void ShowApp()
+    {
+        if (startHidden && !everShown) CenterToScreen(); // started in the tray: Windows didn't place it yet
+        everShown = true;
+        Show();
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+        SetForegroundWindow(Handle);
+    }
+
+    // --- the shortcut that starts the screen picker, from any app ---
+    bool RegisterShortcut(string keys)
+    {
+        uint mods, vk;
+        UnregisterHotKey(Handle, 1);
+        hotkeyOk = Program.ParseHotkey(keys, out mods, out vk) && RegisterHotKey(Handle, 1, mods | 0x4000, vk); // 0x4000: no auto-repeat
+        return hotkeyOk;
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == 0x0312 && m.WParam.ToInt32() == 1) { PickScreenColor(); return; } // WM_HOTKEY
+        if (m.Msg == Program.WM_PICK && Program.WM_PICK != 0) { PickScreenColor(); return; }
+        if (m.Msg == Program.WM_OPEN && Program.WM_OPEN != 0) { ShowApp(); return; }
+        base.WndProc(ref m);
+    }
+
+    // --- tray: the app keeps running there so the shortcut works with the window closed ---
+    void MakeTray()
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Open ASTROLABE", null, (s, e) => ShowApp());
+        trayPick = new ToolStripMenuItem("Pick a colour", null, (s, e) => PickScreenColor());
+        menu.Items.Add(trayPick);
+        trayAuto = new ToolStripMenuItem("Start with Windows", null, (s, e) => SetAutoStart(!Program.AutoStart));
+        menu.Items.Add(trayAuto);
+        trayTop = new ToolStripMenuItem("Always on top", null, (s, e) => SetOnTop(!Program.OnTop));
+        menu.Items.Add(trayTop);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Quit", null, (s, e) => Quit());
+        menu.Opening += (s, e) =>
+        {
+            trayPick.ShortcutKeyDisplayString = hotkeyOk ? Program.Hotkey : "";
+            trayAuto.Checked = Program.AutoStart;
+            trayTop.Checked = Program.OnTop;
+        };
+        tray = new NotifyIcon();
+        try { tray.Icon = new Icon(Icon, SystemInformation.SmallIconSize); } catch (Exception) { tray.Icon = Icon; }
+        tray.Text = Program.Title;
+        tray.ContextMenuStrip = menu;
+        tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowApp(); };
+        tray.Visible = true;
+    }
+
+    void SetAutoStart(bool on)
+    {
+        Program.SetSetting("autostart", on ? "1" : "0");
+        Program.ApplyAutoStart();
+        SendSettings(null);
+    }
+
+    // stay above other apps' windows (kept between starts)
+    void SetOnTop(bool on)
+    {
+        Program.SetSetting("ontop", on ? "1" : "0");
+        TopMost = on;
+        SendSettings(null);
+    }
+
+    void Quit()
+    {
+        quitting = true;
+        Close();
+    }
+
+    // closing the window hides it to the tray; Quit (tray menu) or Windows shutting down ends the app
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!quitting && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; Hide(); return; }
+        base.OnFormClosing(e);
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        if (tray != null) { tray.Visible = false; tray.Dispose(); }
+        base.OnFormClosed(e);
+    }
+
+    // the page's settings menu shows the shortcut and "start with Windows"
+    void SendSettings(string error)
+    {
+        if (web.CoreWebView2 == null) return;
+        web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"settings\",\"hotkey\":" + Json(Program.Hotkey) + ",\"hotkeyOk\":" + (hotkeyOk ? "true" : "false") +
+            ",\"autostart\":" + (Program.AutoStart ? "true" : "false") + ",\"ontop\":" + (Program.OnTop ? "true" : "false") + ",\"error\":" + Json(error) + "}");
+    }
+
+    void ChangeShortcut(string keys)
+    {
+        uint mods, vk;
+        if (!Program.ParseHotkey(keys, out mods, out vk)) { RegisterShortcut(Program.Hotkey); SendSettings(keys + " can't be a shortcut."); return; }
+        if (RegisterShortcut(keys)) { Program.SetSetting("hotkey", keys); SendSettings(null); return; }
+        RegisterShortcut(Program.Hotkey); // put the old one back
+        SendSettings(keys + " is taken by another app. Pick other keys.");
+    }
+
+    // a borderless window that still has a shadow, a taskbar minimise/restore and Alt+F4
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            CreateParams cp = base.CreateParams;
+            cp.ClassStyle |= 0x20000;            // CS_DROPSHADOW
+            cp.Style |= 0x20000 | 0x80000;        // WS_MINIMIZEBOX | WS_SYSMENU
+            return cp;
+        }
     }
 
     double DisplayScale { get { uint dpi = IsHandleCreated ? GetDpiForWindow(Handle) : 96; return (dpi == 0 ? 96 : dpi) / 96.0; } }
@@ -172,7 +434,26 @@ class MainForm : Form
             e.Handled = true; // links open in the normal browser, never inside the app
             if (e.Uri.StartsWith("http")) { try { Process.Start(e.Uri); } catch (Exception) { } }
         };
+        // Right-click: only the edit commands that apply (copy, paste and so on), then "Always on top".
+        // The browser's own items (back, reload, save as, print) mean nothing in this app.
+        core.ContextMenuRequested += (s, e) =>
+        {
+            var keep = new HashSet<string> { "undo", "redo", "cut", "copy", "paste", "pasteAndMatchStyle", "selectAll" };
+            IList<CoreWebView2ContextMenuItem> items = e.MenuItems;
+            for (int i = items.Count - 1; i >= 0; i--) if (!keep.Contains(items[i].Name)) items.RemoveAt(i);
+            while (items.Count > 0 && items[items.Count - 1].Kind == CoreWebView2ContextMenuItemKind.Separator) items.RemoveAt(items.Count - 1);
+            if (items.Count > 0) items.Add(core.Environment.CreateContextMenuItem("", null, CoreWebView2ContextMenuItemKind.Separator));
+            CoreWebView2ContextMenuItem top = core.Environment.CreateContextMenuItem("Always on top", null, CoreWebView2ContextMenuItemKind.CheckBox);
+            top.IsChecked = TopMost;
+            top.CustomItemSelected += (s2, e2) => BeginInvoke(new Action(() => SetOnTop(!Program.OnTop)));
+            items.Add(top);
+        };
         core.WebMessageReceived += OnMessage;
+        core.NavigationCompleted += (s, e) =>
+        {
+            pageReady = true;
+            if (pendingPick != null) { core.PostWebMessageAsJson("{\"type\":\"picked-color\",\"hex\":" + Json(pendingPick) + "}"); pendingPick = null; }
+        };
         core.Navigate("https://ocio.app/app.html");
     }
 
@@ -184,6 +465,16 @@ class MainForm : Form
         try { msg = e.TryGetWebMessageAsString(); } catch (Exception) { return; }
         if (msg == "pick") { PickConfig(); return; }
         if (msg == "eyedropper") { PickScreenColor(); return; }
+        // the page's header is the title bar
+        if (msg == "drag") { ReleaseCapture(); SendMessage(Handle, 0xA1, (IntPtr)2, IntPtr.Zero); return; } // WM_NCLBUTTONDOWN, HTCAPTION
+        if (msg == "min") { WindowState = FormWindowState.Minimized; return; }
+        if (msg == "close") { Hide(); return; } // to the tray
+        if (msg == "settings") { SendSettings(null); return; }
+        if (msg == "hotkey-pause") { UnregisterHotKey(Handle, 1); return; }
+        if (msg == "hotkey-resume") { RegisterShortcut(Program.Hotkey); SendSettings(null); return; }
+        if (msg != null && msg.StartsWith("hotkey:")) { ChangeShortcut(msg.Substring(7)); return; }
+        if (msg != null && msg.StartsWith("autostart:")) { SetAutoStart(msg.Substring(10) == "1"); return; }
+        if (msg != null && msg.StartsWith("ontop:")) { SetOnTop(msg.Substring(6) == "1"); return; }
         string[] p = (msg ?? "").Split(':');
         double w, h;
         if (p.Length != 3 || p[0] != "fit") return;
@@ -194,13 +485,15 @@ class MainForm : Form
 
     // Eyedropper for the whole screen: hide this window, freeze every monitor in a screenshot,
     // let the user click a pixel (with a magnifier), then answer {"type":"picked-color","hex":...}.
+    // From the shortcut or the tray with the window closed: the window opens only once a colour is picked.
     bool picking;
     async void PickScreenColor()
     {
         if (picking) return;
         picking = true;
+        bool wasShown = Visible && WindowState != FormWindowState.Minimized;
         Hide();
-        await Task.Delay(250); // let the windows behind repaint
+        await Task.Delay(wasShown ? 250 : 30); // let the windows behind repaint
         Rectangle virt = SystemInformation.VirtualScreen;
         var shot = new Bitmap(virt.Width, virt.Height, System.Drawing.Imaging.PixelFormat.Format32bppRgb);
         using (Graphics g = Graphics.FromImage(shot)) g.CopyFromScreen(virt.Left, virt.Top, 0, 0, virt.Size, CopyPixelOperation.SourceCopy);
@@ -213,11 +506,12 @@ class MainForm : Form
             done = true;
             foreach (var o in overlays) o.Close();
             shot.Dispose();
-            Show();
-            Activate();
             picking = false;
+            if (!c.HasValue && !wasShown) return; // cancelled from the tray: stay there
+            ShowApp();
             string hex = c.HasValue ? string.Format("#{0:X2}{1:X2}{2:X2}", c.Value.R, c.Value.G, c.Value.B) : null;
-            web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"picked-color\",\"hex\":" + Json(hex) + "}");
+            if (pageReady) web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"picked-color\",\"hex\":" + Json(hex) + "}");
+            else pendingPick = hex;
         };
         foreach (Screen s in Screen.AllScreens) overlays.Add(new PickOverlay(shot, virt.Location, s.Bounds, finish));
         foreach (var o in overlays) o.Show();
@@ -356,7 +650,82 @@ class MainForm : Form
 // Click picks, Esc or right-click cancels, arrow keys move one pixel, Enter picks.
 class PickOverlay : Form
 {
-    const int Cells = 11, Zoom = 12, Gap = 22;
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool GetIconInfo(IntPtr icon, out IconInfo info);
+    [DllImport("user32.dll")] static extern IntPtr CreateIconIndirect(ref IconInfo info);
+    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+    [StructLayout(LayoutKind.Sequential)]
+    struct IconInfo { public bool fIcon; public int xHotspot, yHotspot; public IntPtr hbmMask, hbmColor; }
+
+    const int Cells = 11, Zoom = 12, Gap = 30, Chip = 14;
+    Rectangle lastChip = Rectangle.Empty;
+
+    // The cursor is the pipette from the app (and the After Effects panel): black with a white edge so it
+    // shows on any background, its tip on the picked pixel.
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        uint dpi = GetDpiForWindow(Handle);
+        try { Cursor = PipetteCursor((int)Math.Round(32 * (dpi == 0 ? 96 : dpi) / 96.0)); } catch (Exception) { Cursor = Cursors.Cross; }
+    }
+
+    static Cursor PipetteCursor(int size)
+    {
+        using (var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+        {
+            float k = size / 24f;
+            using (Graphics g = Graphics.FromImage(bmp))
+            using (var bulb = Rounded(9.5f, 1.5f, 5f, 7f, 2.5f))
+            using (var collar = Rounded(8f, 8.5f, 8f, 2.2f, 1f))
+            using (var tube = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                // the same drawing as the app's pipette icon: a 24-unit box, turned 45 degrees about its middle
+                g.ScaleTransform(k, k);
+                g.TranslateTransform(12, 12); g.RotateTransform(45); g.TranslateTransform(-12, -12);
+                tube.AddLines(new[] { new PointF(10.6f, 11.3f), new PointF(10.6f, 18.5f), new PointF(12f, 22f), new PointF(13.4f, 18.5f), new PointF(13.4f, 11.3f) });
+                using (var halo = new Pen(Color.White, 3.2f) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round })
+                {
+                    g.DrawPath(halo, bulb); g.DrawPath(halo, collar); g.DrawPath(halo, tube);
+                }
+                using (var glass = new SolidBrush(Color.FromArgb(230, 255, 255, 255))) g.FillPath(glass, tube);
+                using (var ink = new Pen(Color.Black, 1.4f) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round })
+                {
+                    g.FillPath(Brushes.Black, bulb); g.FillPath(Brushes.Black, collar); g.DrawPath(ink, tube);
+                }
+            }
+            // the tip (12, 22) after the turn: 45 degrees about (12, 12)
+            int hx = (int)Math.Round((12 - 10 * Math.Sin(Math.PI / 4)) * k), hy = (int)Math.Round((12 + 10 * Math.Cos(Math.PI / 4)) * k);
+            IntPtr icon = bmp.GetHicon();
+            IconInfo info;
+            GetIconInfo(icon, out info);
+            DestroyIcon(icon);
+            info.fIcon = false; info.xHotspot = hx; info.yHotspot = hy;
+            IntPtr cur = CreateIconIndirect(ref info);
+            DeleteObject(info.hbmMask); DeleteObject(info.hbmColor);
+            return new Cursor(cur);
+        }
+    }
+
+    static System.Drawing.Drawing2D.GraphicsPath Rounded(float x, float y, float w, float h, float r)
+    {
+        var p = new System.Drawing.Drawing2D.GraphicsPath();
+        float d = Math.Min(r * 2, Math.Min(w, h));
+        p.AddArc(x, y, d, d, 180, 90); p.AddArc(x + w - d, y, d, d, 270, 90);
+        p.AddArc(x + w - d, y + h - d, d, d, 0, 90); p.AddArc(x, y + h - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
+    // the small chip with the colour under the tip: just below and right of the tip, where the pipette isn't
+    Rectangle ChipRect(Point local)
+    {
+        int x = local.X + 8, y = local.Y + 8;
+        if (x + Chip + 2 > Width) x = local.X - 8 - Chip;
+        if (y + Chip + 2 > Height) y = local.Y - 8 - Chip;
+        return new Rectangle(x - 2, y - 2, Chip + 4, Chip + 4);
+    }
     readonly Bitmap shot;
     readonly Point origin;      // top-left of the whole desktop in the screenshot
     readonly Action<Color?> finish;
@@ -371,7 +740,6 @@ class PickOverlay : Form
         ShowInTaskbar = false;
         TopMost = true;
         KeyPreview = true;
-        Cursor = Cursors.Cross;
         Bounds = bounds;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Opaque, true);
     }
@@ -425,17 +793,26 @@ class PickOverlay : Form
         using (var f = new Font("Segoe UI", 7.5f, GraphicsUnit.Point))
             TextRenderer.DrawText(g, "Click to pick · Esc to cancel", f, new Point(lx, ly + size + 20), Color.FromArgb(153, 153, 153));
         using (var edge = new Pen(Color.FromArgb(70, 70, 70))) g.DrawRectangle(edge, r.X, r.Y, r.Width - 1, r.Height - 1);
+        // the chip next to the pipette: dark edge, white edge, then the colour
+        Rectangle chip = ChipRect(local);
+        using (var dark = new SolidBrush(Color.FromArgb(29, 29, 29))) g.FillRectangle(dark, chip);
+        g.FillRectangle(Brushes.White, chip.X + 1, chip.Y + 1, chip.Width - 2, chip.Height - 2);
+        using (var sw = new SolidBrush(picked)) g.FillRectangle(sw, chip.X + 2, chip.Y + 2, chip.Width - 4, chip.Height - 4);
     }
 
     void UpdateLoupe(Point screen)
     {
         if (!lastLoupe.IsEmpty) Invalidate(lastLoupe);
+        if (!lastChip.IsEmpty) Invalidate(lastChip);
         if (Bounds.Contains(screen))
         {
-            lastLoupe = LoupeRect(new Point(screen.X - Left, screen.Y - Top));
+            var local = new Point(screen.X - Left, screen.Y - Top);
+            lastLoupe = LoupeRect(local);
+            lastChip = ChipRect(local);
             Invalidate(lastLoupe);
+            Invalidate(lastChip);
         }
-        else lastLoupe = Rectangle.Empty;
+        else { lastLoupe = Rectangle.Empty; lastChip = Rectangle.Empty; }
     }
 
     protected override void OnShown(EventArgs e) { base.OnShown(e); UpdateLoupe(Cursor.Position); }
