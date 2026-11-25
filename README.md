@@ -1,13 +1,12 @@
 # ASTROLABE
 
-ASTROLABE is a standalone OCIO able color picker, catered towards CGI artists. It helps navigate color between color profiles, so what you see, it what you get.
+ASTROLABE is a standalone OCIO able color picker, catered towards CGI artists. It helps navigate color between color profiles, so what you see is what you get.
 
-Built-in ACES 1.0 maths with sRGB and Rec.709 outputs
-Loads any OCIO config, or picks one already on your PC (After Effects, Redshift, Cinema 4D, Houdini, Blender, Nuke)
-Colour picker with a screen eyedropper that works on every monitor
-Remembers your default config
-Windows wide shortcut to launch the color picker (Shift + Alt + C)
-
+- Built-in ACES 1.0 maths with sRGB and Rec.709 outputs
+- Loads any OCIO config, or picks one already on your PC (After Effects, Redshift, Cinema 4D, Houdini, Blender, Nuke)
+- Colour picker with a screen eyedropper that works on every monitor
+- Remembers your default config
+- Windows-wide shortcut to launch the color picker (Shift + Alt + C)
 
 The user guide is [app/README.md](app/README.md). This page is for building it.
 
