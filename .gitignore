@@ -1,12 +1,8 @@
 # Build output: made by build.js and native/build_native.js, so not kept in git.
 # The exe goes on a GitHub Release instead.
 native/dist/
-desktop/dist/
 node_modules/
-srgb-aces-converter.html
 app/ASTROLABE.html
-desktop/app.html
-desktop/icon.ico
 
 # Where `node build.js --deploy` copies the app: local to this PC
 deploy-path.txt
@@ -21,8 +17,8 @@ desktop.ini
 # The sales site: kept on this PC, not in git for now
 site/
 
-# ASTROLABE for After Effects (ae/): build output and files ae/build.js copies or builds
-ae/dist/
-ae/extension/js/ocio.js
-ae/extension/js/builtins.js
-ae/extension/bin/
+# ASTROLABE for After Effects: kept on this PC, not in this repo
+ae/
+
+# Reference data made from other apps' OCIO configs (ocio/ref_configs.py): stays on this PC, not online
+ocio/ref_configs.json

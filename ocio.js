@@ -193,6 +193,12 @@ const OCIOEngine = (() => {
         p = j;
         return out;
       };
+      // every pass through a list or map must read something: a stray "}" in a list (or "]" in a map)
+      // would otherwise stop the reader in place forever. Stop with an error instead.
+      const stuck = (from) => {
+        if (p > from) return;
+        throw new Error('Could not read line ' + (lineIdx + 1) + ' of the config: unexpected "' + s[p] + '" in ' + s.trim().slice(0, 80));
+      };
       function value(isKey) {
         ws();
         let t = null;
@@ -206,6 +212,7 @@ const OCIOEngine = (() => {
             ws();
             if (s[p] === '}') { p++; break; }
             if (p >= s.length) break;
+            const from = p;
             const k = value(true);
             ws();
             let val = null;
@@ -213,6 +220,7 @@ const OCIOEngine = (() => {
             v[k] = val;
             ws();
             if (s[p] === ',') p++;
+            stuck(from);
           }
         } else if (c === '[') {
           p++; v = [];
@@ -220,9 +228,11 @@ const OCIOEngine = (() => {
             ws();
             if (s[p] === ']') { p++; break; }
             if (p >= s.length) break;
+            const from = p;
             v.push(value(false));
             ws();
             if (s[p] === ',') p++;
+            stuck(from);
           }
         } else if (c === '"' || c === "'") v = quoted();
         else v = plain(isKey);
@@ -358,14 +368,18 @@ const OCIOEngine = (() => {
   // ExponentWithLinearTransform (moncurve): forward decodes, e.g. sRGB encoded -> linear
   function moncurveOp(gam, off, style) {
     const mirror = /mirror/i.test(String(style || ''));
+    // Two edge cases where the usual formulas divide by zero: offset 0 is a plain power curve (the linear
+    // part shrinks to nothing: values at or below 0 give 0), and gamma 1 is a straight line throughout.
     const P = [0, 1, 2].map((k) => {
       const g = gam[k], o = off[k];
+      if (g === 1) return { g, o, line: true };
+      if (!(o > 0)) return { g, o: 0, brk: 0, slope: 0, brkOut: 0 };
       const brk = o / (g - 1);
       const slope = (Math.pow((o * g) / ((g - 1) * (1 + o)), g) * (g - 1)) / o;
       return { g, o, brk, slope, brkOut: brk * slope };
     });
-    const fw = (x, p) => (x <= p.brk ? x * p.slope : Math.pow((x + p.o) / (1 + p.o), p.g));
-    const iv = (y, p) => (y <= p.brkOut ? y / p.slope : (1 + p.o) * Math.pow(y, 1 / p.g) - p.o);
+    const fw = (x, p) => (p.line ? (x + p.o) / (1 + p.o) : x <= p.brk ? x * p.slope : Math.pow((x + p.o) / (1 + p.o), p.g));
+    const iv = (y, p) => (p.line ? y * (1 + p.o) - p.o : y <= p.brkOut ? (p.slope ? y / p.slope : 0) : (1 + p.o) * Math.pow(y, 1 / p.g) - p.o);
     const wrap = (fn) => (v) => v.map((x, k) => (mirror && x < 0 ? -fn(-x, P[k]) : fn(x, P[k])));
     return op(wrap(fw), wrap(iv), 'EL' + gam.join(',') + off.join(',') + mirror);
   }
@@ -1068,9 +1082,10 @@ const OCIOEngine = (() => {
     };
     const nodes = n * n * n;
     // inverse: start from the grid points whose outputs are closest (several, as a LUT can fold back
-    // near the gamut edge), solve inside the table from each, keep the best
+    // near the gamut edge), solve inside the table from each, keep the best. A colour the table can't
+    // make has no true inverse: the best is only a guess, so it sets ctx.outsideLut for the caller to say so.
     const K = 8;
-    const inv = (y) => {
+    const inv = (y, ctx) => {
       const bestI = new Array(K).fill(-1), bestD = new Array(K).fill(Infinity);
       for (let i = 0; i < nodes; i++) {
         const a = data[i * 3] - y[0], b = data[i * 3 + 1] - y[1], c = data[i * 3 + 2] - y[2];
@@ -1091,6 +1106,7 @@ const OCIOEngine = (() => {
         if (e < outErr) { out = x; outErr = e; }
         if (e < 1e-9) break;
       }
+      if (ctx && outErr > 1e-4) ctx.outsideLut = true;
       return out;
     };
     const o = op(fwd, inv);
@@ -1524,6 +1540,8 @@ const OCIOEngine = (() => {
     return {
       forward: (v) => fwd(v),
       raw: (v) => fwd(v, { measure: true }),
+      // true when the forward result went through a 3D LUT backwards for a colour that LUT can't make
+      outsideLut: (v) => { const ctx = {}; fwd(v, ctx); return !!ctx.outsideLut; },
       inverse(y) {
         let x0;
         try { x0 = back(y); } catch (e) { x0 = null; }

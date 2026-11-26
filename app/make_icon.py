@@ -1,4 +1,4 @@
-# Makes icon.ico, icon_256.png and icon_32.png from logo.svg: the logo in light grey on a dark grey
+# Makes icon.ico from logo.svg: the logo in light grey on a dark grey
 # rounded tile, so it reads on light and dark taskbars. Edge (headless) draws each size; this script
 # packs them into the .ico. Plain Python, no libraries. Run: python app/make_icon.py
 import base64, os, struct, subprocess, tempfile, re
@@ -44,6 +44,4 @@ with open(os.path.join(here, 'icon.ico'), 'wb') as f:
         offset += len(p)
     for _, p in pngs:
         f.write(p)
-open(os.path.join(here, 'icon_256.png'), 'wb').write(dict(pngs)[256])
-open(os.path.join(here, 'icon_32.png'), 'wb').write(dict(pngs)[32])
 print('wrote icon.ico')

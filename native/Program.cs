@@ -215,6 +215,7 @@ class MainForm : Form
     bool firstShow = true, everShown, started, pageReady, quitting;
     string pendingPick;          // a colour picked before the page had loaded
     bool hotkeyOk;
+    bool autoFit; // "Fit colours into range automatically", as the page last reported it
     NotifyIcon tray;
     ToolStripMenuItem trayPick, trayAuto, trayTop;
 
@@ -408,11 +409,19 @@ class MainForm : Form
             CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Program.Home, "webview"));
             await web.EnsureCoreWebView2Async(env);
         }
+        // Without its page the app can do nothing: say why and quit for real (a plain Close() would only
+        // hide it to the tray, leaving an empty app running). No owner window: it may be hidden.
         catch (WebView2RuntimeNotFoundException)
         {
-            MessageBox.Show(this, "This PC is missing the Microsoft Edge WebView2 Runtime, which ASTROLABE needs.\n\nGet it from https://developer.microsoft.com/microsoft-edge/webview2/ and start the app again.",
+            MessageBox.Show("This PC is missing the Microsoft Edge WebView2 Runtime, which ASTROLABE needs.\n\nGet it from https://developer.microsoft.com/microsoft-edge/webview2/ and start the app again.",
                 Program.Title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            Close();
+            Quit();
+            return;
+        }
+        catch (Exception e)
+        {
+            MessageBox.Show("ASTROLABE could not start its window.\n\n" + e.Message, Program.Title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Quit();
             return;
         }
         CoreWebView2 core = web.CoreWebView2;
@@ -447,6 +456,12 @@ class MainForm : Form
             top.IsChecked = TopMost;
             top.CustomItemSelected += (s2, e2) => BeginInvoke(new Action(() => SetOnTop(!Program.OnTop)));
             items.Add(top);
+            // the page owns this setting (gear menu); the menu shows what the page last reported and asks it to switch
+            CoreWebView2ContextMenuItem fit = core.Environment.CreateContextMenuItem("Fit colours into range automatically", null, CoreWebView2ContextMenuItemKind.CheckBox);
+            fit.IsChecked = autoFit;
+            fit.CustomItemSelected += (s2, e2) => BeginInvoke(new Action(() =>
+                core.PostWebMessageAsJson("{\"type\":\"autofit\",\"on\":" + (autoFit ? "false" : "true") + "}")));
+            items.Add(fit);
         };
         core.WebMessageReceived += OnMessage;
         core.NavigationCompleted += (s, e) =>
@@ -475,6 +490,7 @@ class MainForm : Form
         if (msg != null && msg.StartsWith("hotkey:")) { ChangeShortcut(msg.Substring(7)); return; }
         if (msg != null && msg.StartsWith("autostart:")) { SetAutoStart(msg.Substring(10) == "1"); return; }
         if (msg != null && msg.StartsWith("ontop:")) { SetOnTop(msg.Substring(6) == "1"); return; }
+        if (msg != null && msg.StartsWith("autofit:")) { autoFit = msg.Substring(8) == "1"; return; }
         string[] p = (msg ?? "").Split(':');
         double w, h;
         if (p.Length != 3 || p[0] != "fit") return;

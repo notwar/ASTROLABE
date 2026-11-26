@@ -30,3 +30,4 @@ for (const [style, r] of Object.entries(refs)) {
   if (!okB) console.log('      inv in ' + f4(wb[0]) + ' ocio ' + f4(wb[1]) + ' js ' + f4(wb[2]));
 }
 console.log(bad ? bad + ' builtins differ' : 'all builtins match');
+process.exitCode = bad ? 1 : 0;

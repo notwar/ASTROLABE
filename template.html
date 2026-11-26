@@ -132,6 +132,9 @@ kbd { font-family: var(--font-num); font-size: 9px; border: 1px solid var(--line
 .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; min-width: 0; }
 .head { display: grid; gap: 6px; }
 .head h2 { font-size: 12.5px; font-weight: 600; margin: 0; }
+/* one line under each dropdown saying what that side means (full text on hover) */
+.spaceNote { margin: 0; font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.noExplain .spaceNote { display: none; } /* switched off in the settings */
 /* dropdowns are an underline */
 select.spaceSel {
   font-size: 11px; font-weight: 500; width: 100%; height: 26px; padding: 0 2px; background: transparent; color: var(--fg);
@@ -216,6 +219,8 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
 /* warnings stand out: the chip turns inverted (still grey only) */
 .chip.warn { background: var(--fg); color: var(--surface); font-weight: 500; }
 .chip.warn::before { background: var(--surface); color: var(--fg); }
+.chip .useClosest { font-size: inherit; font-weight: 600; white-space: nowrap; }
+.chip.warn .useClosest { color: var(--surface); }
 .chip[hidden] { display: none; }
 /* the same marks inline in the help text, greyed */
 .mk {
@@ -263,6 +268,9 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
             <button class="btn" id="cfgFolderBtn" type="button" hidden>Pick its folder…</button>
           </div>
           <p class="cfgStatus" id="cfgStatus" role="status"></p>
+          <p class="menuHead">Colours</p>
+          <label class="hkRow" title="When a colour can't be made inside both colour spaces, use the nearest one that can"><span>Fit colours into range automatically</span><input type="checkbox" id="autoFit"></label>
+          <label class="hkRow" title="The line under each dropdown that says what Output and Input mean"><span>Explain Output and Input under the dropdowns</span><input type="checkbox" id="explainOn"></label>
           <div id="hkBox" hidden>
             <p class="menuHead">Window</p>
             <label class="hkRow"><span>Always on top of other apps</span><input type="checkbox" id="hkTop"></label>
@@ -304,6 +312,7 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       <div class="head">
         <h2>Output</h2>
         <select id="out" class="spaceSel" aria-label="Colour space of the final file" title="Colour space of the final file"></select>
+        <p class="spaceNote" id="out-note"></p>
       </div>
       <div class="group">
         <div class="swatch" id="e-swatch"></div>
@@ -328,6 +337,7 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       <div class="head">
         <h2>Input</h2>
         <select id="interp" class="spaceSel" aria-label="Colour space of the value you type" title="Colour space of the value you type"></select>
+        <p class="spaceNote" id="in-note"></p>
       </div>
       <div class="group">
         <div class="swatch" id="a-swatch"></div>
@@ -419,7 +429,7 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
   const BUILTIN = (() => {
     const IN = {
       invert: { label: 'Invert ACES 1.0 SDR-video', ext: false, kind: 'display', note: 'sRGB numbers that already include the ACES look. Made for sRGB output.' },
-      srgb: { label: 'sRGB', ext: true, kind: 'display', note: 'plain sRGB numbers, like a texture. The ACES look darkens them on the way out.' },
+      srgb: { label: 'ACES/sRGB', ext: true, kind: 'display', note: 'plain sRGB numbers, like a texture. The ACES look darkens them on the way out.' },
       cg: { label: 'ACEScg', ext: true, kind: 'aces', note: 'scene-linear ACES numbers, AP1 primaries (the working space).' },
       ap0: { label: 'ACES2065-1', ext: true, kind: 'aces', note: 'scene-linear ACES numbers, AP0 primaries.' },
       cct: { label: 'ACEScct', ext: true, kind: 'aces', note: 'log-encoded ACEScg.' },
@@ -434,11 +444,15 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       name: 'AS_STUDIO ACES 1.0',
       short: 'AS_STUDIO ACES 1.0 · built in',
       inputs: () => Object.entries(IN).map(([id, x]) => Object.assign({ id }, x)),
-      outputs: Object.entries(OUT).map(([id, x]) => ({ id, label: x.label })),
+      // named like a config's outputs (display · view), so "sRGB" on the Output side isn't read as the same thing as the sRGB input
+      outputs: Object.entries(OUT).map(([id, x]) => ({ id, label: x.label + ' · ACES 1.0 SDR-video' })),
       defaults: () => ({ interp: 'invert', out: 'srgb' }),
       prepare: async () => {},
       final: (i, o, v) => ACESCore.exportOf(ACESCore.interpToCg(i, v), o),
       raw: (i, o, v) => ACESCore.cgToDisplayLin(ACESCore.interpToCg(i, v)),
+      // what raw() gives for a final colour t (raw is linear display light here, before the output curve)
+      rawTarget: (o, t) => (o === 'srgb' ? t.map(ACESCore.srgbDecode) : t.map((v) => Math.pow(v, 2.4))),
+      outsideLut: () => false, // no LUTs here
       typed: (i, o, t) => ACESCore.cgToInterp(i, ACESCore.cgForExport(t, o)),
       convert: (a, b, o, v) => ACESCore.cgToInterp(b, ACESCore.interpToCg(a, v)),
       gamut: (i, v) => (IN[i].kind === 'display' ? { vals: v, space: 'sRGB', kind: 'display' } : { vals: ACESCore.interpToCg(i, v), space: 'ACEScg', kind: 'aces' }),
@@ -533,6 +547,8 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       },
       final: (i, o, v) => proc(i, o).forward(v),
       raw: (i, o, v) => proc(i, o).raw(v),
+      rawTarget: (o, t) => t, // raw is the final colour without its last clamp
+      outsideLut: (i, o, v) => { try { return proc(i, o).outsideLut(v); } catch (e) { return false; } },
       typed: (i, o, t) => proc(i, o).inverse(t),
       convert(a, b, o, v) { return proc(b, o).inverse(proc(a, o).forward(v)); },
       gamut: (i, v, o) => {
@@ -555,7 +571,7 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
           how: '<b>How it works.</b> Whatever the app (After Effects, Resolve, Cinema 4D, Houdini), every colour goes through the same view on the way out: <b>' + esc(out.view) + '</b> on the <b>' + esc(out.display) + '</b> display of this config. The tool solves that backwards. Give it the colour the final file must have, pick the colour profile of the value you type, and it gives you the numbers to type. The note with a tick double-checks by running those numbers forward, rounded the way you\'d type them.',
           profiles: '<b>Colour profiles</b> are the config\'s colour spaces. The ones marked <b>(inverted)</b> undo a view: with that same view as the output, you type the final colour as is.',
           outputs: '<b>Outputs</b> are the config\'s displays and views. "Matches" means the pixel values in the final file equal the target hex. The swatches show the numbers as sRGB, so for P3 or HDR outputs they are only a guide.',
-          foot: 'Config: <code>' + esc(path) + '</code>. ASTROLABE runs the config with its own copy of the OCIO maths. Checked against OCIO 2.5 on the configs that come with After Effects, Houdini, Cinema 4D, Redshift, Nuke and Blender: results agree within 0.001, ACES 1.x and 2.0 views within 0.0001.',
+          foot: 'Config: <code>' + esc(path) + '</code>. ASTROLABE runs the config with its own copy of the OCIO maths. Checked against OCIO 2.5 on the configs that come with After Effects, Houdini, Cinema 4D, Redshift, Nuke, Resolve and Blender: results agree within 0.001 (Blender\'s False Color view within 0.005). Where a config runs a LUT backwards, OCIO approximates and ASTROLABE solves exactly, so those results can differ a little; colours a LUT can\'t make get a note.',
         };
       },
     };
@@ -630,8 +646,9 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
     if (p === 'e') return c;
     try { const s = sel(); return model.final(s.interp, s.out, c); } catch (e) { return null; }
   };
-  function setColour(p, c) {
+  function setColour(p, c, auto) {
     if (!c || !c.every(Number.isFinite)) return;
+    if (!auto) autoNote = null; // an automatic fit's note lasts until you change the colour yourself
     state.src = p; // whichever panel you edit drives the other one
     if (p === 'e') state.exp = c; else state.ae = c;
     render();
@@ -749,17 +766,121 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       if (document.activeElement !== box) { box.value = text; box.classList.toggle('na', !valid); box.classList.remove('bad'); }
     });
     const tab = PAN[p].tab;
-    copyText[p + '-tab'] = !c || shown.includes('—') ? '' : tab === 'rgb' ? (floaty(p) ? shown.join(', ') : 'rgb(' + shown.join(', ') + ')') : tab + '(' + shown[0] + ', ' + shown[1] + '%, ' + shown[2] + '%)';
+    // Input floats are copied with as many decimals as it takes to hit the colour (the boxes show 4)
+    const floats = c ? (p === 'a' ? preciseFloats(c) : c.map((v) => fmt(v))) : null;
+    copyText[p + '-tab'] = !c || shown.includes('—') ? '' : tab === 'rgb' ? (floaty(p) ? floats.join(', ') : 'rgb(' + shown.join(', ') + ')') : tab + '(' + shown[0] + ', ' + shown[1] + '%, ' + shown[2] + '%)';
     for (let i = 0; i < 3; i++) {
       const box = $(p + '-f' + i);
       if (document.activeElement !== box) { box.value = c ? fmt(c[i]) : '—'; box.classList.toggle('na', !c); box.classList.remove('bad'); }
     }
-    copyText[p + '-flt'] = c ? c.map((v) => fmt(v)).join(', ') : '';
+    copyText[p + '-flt'] = floats ? floats.join(', ') : '';
   }
 
   // the typed value as you'd actually type it: 0-255 for display numbers in range, else 4-decimal floats
   const asTyped = (inp, v) => (inp.kind === 'display' && inRange(v) ? v.map((x) => to8(x) / 255) : v.map((x) => +x.toFixed(4)));
   const setChip = (id, text, cls) => { $(id).textContent = text; $(id).className = 'chip' + (text ? ' show' : '') + (cls ? ' ' + cls : ''); };
+
+  // Input floats as copied: the fewest decimals (4 to 8) that still land on the same final hex as the exact
+  // values. The boxes show 4 decimals; 4 aren't always enough to hit the colour, so the copy holds more.
+  function preciseFloats(v) {
+    const { interp, out } = sel();
+    let want = null;
+    try { want = hexOf(model.final(interp, out, v)); } catch (e) {}
+    for (let d = 4; d <= 8; d++) {
+      const r = v.map((x) => +x.toFixed(d));
+      try { if (!want || hexOf(model.final(interp, out, r)) === want) return v.map((x) => fmt(x, d)); } catch (e) { return v.map((x) => fmt(x, d)); }
+    }
+    return v.map((x) => fmt(x, 8));
+  }
+
+  // When the first answer misses the target hex, look harder before saying a colour can't be made:
+  // Newton from a few starting points, first on the output before its last clamp (smooth, so it finds
+  // tiny channels), then on the final output (finds answers that need values below 0).
+  // Gives { x } (exact, no values below 0: use it), { alt } (exact, but needs values below 0) or {}.
+  const solveCache = new Map();
+  let closestValues = null; // Input values behind the "Use #…" button in the note
+  let fitFrom = null; // what "Fit in range" works from: the current Input values and final colour
+  // settings: fit colours into range automatically (kept on this computer)
+  let autoFit = false, autoNote = null;
+  try { autoFit = localStorage.getItem('astrolabe-autofit') === '1'; } catch (e) {}
+
+  // "Fit in range": the nearest colour that fits both colour spaces. Input values inside the Input space
+  // (display spaces 0 to 1, linear and ACES spaces 0 or more, the same limits the warnings use), and a final
+  // colour inside the output's 0 to 1, as close as possible to the target final colour t.
+  // Least squares on: the final colour minus t, plus each step outside a limit times a weight that grows
+  // until nothing is outside. Gives the Input values, or null when no fit is found.
+  function outside(interp, out, x) {
+    const g = model.gamut(interp, x, out), disp = g.kind === 'display', low = disp || g.kind === 'linear' || g.kind === 'aces';
+    const p = g.vals.map((q) => (low ? Math.max(0, -q) : 0) + (disp ? Math.max(0, q - 1) : 0));
+    return p.concat(model.raw(interp, out, x).map((q) => Math.max(0, -q) + Math.max(0, q - 1)));
+  }
+  function fitInRange(interp, out, t, x0) {
+    const cost = (x, w) => model.final(interp, out, x).map((q, k) => q - t[k]).concat(outside(interp, out, x).map((q) => q * w));
+    const sum = (r) => r.reduce((a, q) => a + q * q, 0);
+    // least squares over 3 unknowns (Levenberg-Marquardt, slopes by small steps)
+    const lsq = (x, w) => {
+      let r = cost(x, w), c = sum(r), lambda = 1e-3;
+      for (let it = 0; it < 60 && c > 1e-14; it++) {
+        const J = [0, 1, 2].map((k) => { const h = 1e-6 * Math.max(1, Math.abs(x[k])), xp = x.slice(); xp[k] += h; return cost(xp, w).map((q, i) => (q - r[i]) / h); });
+        const A = [0, 1, 2].map((i) => [0, 1, 2].map((j) => J[i].reduce((a, q, n) => a + q * J[j][n], 0)));
+        const g = [0, 1, 2].map((i) => J[i].reduce((a, q, n) => a + q * r[n], 0));
+        let moved = false;
+        for (let tries = 0; tries < 10 && !moved; tries++) {
+          const M = A.map((row, i) => row.map((q, j) => (i === j ? q + lambda * Math.max(q, 1e-12) : q)));
+          const det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+          if (!det || !Number.isFinite(det)) { lambda *= 10; continue; }
+          const solve = (k) => { const N = M.map((row, i) => row.map((q, j) => (j === k ? g[i] : q))); return (N[0][0] * (N[1][1] * N[2][2] - N[1][2] * N[2][1]) - N[0][1] * (N[1][0] * N[2][2] - N[1][2] * N[2][0]) + N[0][2] * (N[1][0] * N[2][1] - N[1][1] * N[2][0])) / det; };
+          const xn = x.map((q, k) => q - solve(k));
+          const rn = cost(xn, w), cn = sum(rn);
+          if (xn.every(Number.isFinite) && cn < c) { x = xn; r = rn; c = cn; lambda = Math.max(lambda / 10, 1e-12); moved = true; } else lambda *= 10;
+        }
+        if (!moved) break;
+      }
+      return x;
+    };
+    const fits = (x) => x && x.every(Number.isFinite) && Math.max(...outside(interp, out, x)) <= 1e-6;
+    // start from the values as they are, and from the simple fix (the values clamped to their limits)
+    const g0 = model.gamut(interp, x0, out);
+    const clamped = g0.vals === x0 || g0.kind === 'display' ? x0.map((q) => Math.min(Math.max(q, 0), g0.kind === 'display' ? 1 : Infinity)) : x0;
+    let best = null, bestErr = Infinity;
+    for (const s of [clamped, x0]) {
+      let x = s.slice();
+      for (const w of [10, 100, 1e4, 1e6]) { x = lsq(x, w); if (fits(x)) break; }
+      // whatever is left just past a limit (rounding) is pulled onto it, then checked again
+      if (!fits(x) && (g0.vals === x0 || g0.kind === 'display')) x = x.map((q) => Math.min(Math.max(q, 0), g0.kind === 'display' ? 1 : Infinity));
+      if (!fits(x)) continue;
+      const e = Math.max(...model.final(interp, out, x).map((q, k) => Math.abs(q - t[k])));
+      if (e < bestErr) { best = x; bestErr = e; }
+    }
+    if (!best && fits(clamped)) best = clamped;
+    return best;
+  }
+  function lookHarder(interp, out, t, x0) {
+    const want = hexOf(t);
+    const hits = (x) => x && x.every(Number.isFinite) && hexOf(model.final(interp, out, x)) === want;
+    const key = [model.key, interp, out, want].join('|');
+    if (solveCache.has(key)) return solveCache.get(key);
+    let res = {};
+    try {
+      const y = model.rawTarget(out, t);
+      const starts = [x0, x0.map((v) => (v < 0.05 ? v + 0.05 : v)), x0.map((v) => v - 0.2), x0.map((v) => (v > 0.5 ? v : v - 0.3))];
+      search: for (const s of starts) {
+        for (const smooth of [true, false]) {
+          let x;
+          try {
+            x = smooth ? E.newton((v) => model.raw(interp, out, v), y, s, 40, 1e-12) : s;
+            x = E.newton((v) => model.final(interp, out, v), t, x, smooth ? 20 : 40, 1e-12);
+          } catch (e) { continue; }
+          if (!hits(x)) continue;
+          if (Math.min(...x) >= -1e-9) { res = { x }; break search; }
+          if (!res.alt) res = { alt: x };
+        }
+      }
+    } catch (e) { res = {}; }
+    if (solveCache.size > 300) solveCache.clear();
+    solveCache.set(key, res);
+    return res;
+  }
 
   // dropdowns follow the model (and, for configs, the inverted views of the output's display)
   function fillSelects() {
@@ -777,16 +898,37 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
     $('interp').innerHTML = html;
     $('out').value = s.out;
     $('interp').value = s.interp;
+    // what each side means. The same name can be on both sides (sRGB): the Output is the final file after
+    // the view, the Input is what you type, before it.
+    let look = '';
+    try { look = model.look(s.out); } catch (e) {}
+    const view = look ? 'the ' + look + ' view' : 'the view';
+    const outNote = 'The final file: what viewers see, after ' + view + '.';
+    // an inverted view already undoes the view: what you type there is the final colour itself
+    const inp = curInput();
+    const undone = !!inp && (inp.id === 'invert' || String(inp.id).startsWith('iv' + SEP) || /^invert\b|\(inverted\)/i.test(inp.label));
+    const inNote = undone ? 'What you type: the final colour itself (the view is undone).' : 'What you type in your app, before ' + view + '.';
+    const desc = String((inp && inp.note) || '').trim();
+    $('out-note').textContent = outNote; $('out-note').title = outNote;
+    $('in-note').textContent = inNote; $('in-note').title = inNote + (desc ? '\n' + inp.label + ': ' + desc : '');
   }
 
   function render(skipGroup) {
     const toAe = state.src === 'e'; // the final colour drives the typed value
     const { interp, out } = sel();
     const inp = curInput();
-    let exp, ae, err = modelError;
+    let exp, ae, err = modelError, needsNegative = null;
     if (!err) {
       try {
-        if (toAe) { exp = state.exp; ae = model.typed(interp, out, exp); state.ae = ae; }
+        if (toAe) {
+          exp = state.exp;
+          ae = model.typed(interp, out, exp);
+          if (ae.every(Number.isFinite) && hexOf(model.final(interp, out, ae)) !== hexOf(exp)) {
+            const better = lookHarder(interp, out, exp, ae);
+            if (better.x) ae = better.x; else if (better.alt) needsNegative = better.alt;
+          }
+          state.ae = ae;
+        }
         else { ae = state.ae; exp = model.final(interp, out, ae); state.exp = exp; }
         if (!ae.every(Number.isFinite) || !exp.every(Number.isFinite)) throw new Error('The calculation came out invalid for this colour.');
       } catch (e) { err = e.message || String(e); }
@@ -807,7 +949,7 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
     // --- out-of-colour-space warnings ---
     const CH = ['R', 'G', 'B'];
     const listCh = (vals, idx) => idx.map((i) => CH[i] + ' ' + fmt(vals[i], 3)).join(', ');
-    let aWarn = '';
+    let aWarn = '', rangeWarn = false;
     if (ae) {
       const g = model.gamut(interp, ae, out);
       const disp = g.kind === 'display';
@@ -815,6 +957,7 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       const lowA = disp || g.kind === 'linear' || g.kind === 'aces' ? [0, 1, 2].filter((i) => chk[i] < -1e-4) : [];
       const highA = disp ? [0, 1, 2].filter((i) => chk[i] > 1 + 1e-4) : [];
       if (lowA.length || highA.length) {
+        rangeWarn = true;
         const parts = [];
         if (highA.length) parts.push(listCh(chk, highA) + ' above 1.0');
         if (lowA.length) parts.push(listCh(chk, lowA) + ' below 0');
@@ -828,8 +971,11 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
           aWarn = 'Outside the ' + g.space + ' gamut: ' + parts.join('; ') + '. The colour is more saturated than ' + g.space + ' can hold, so it may clip.';
         }
       }
-      $('a-range').hidden = fits || floaty('a') || (disp && highA.length > 0);
+      // only for values above 1 that no warning above already explains
+      $('a-range').hidden = fits || floaty('a') || rangeWarn || !ae.some((v) => v > 1 + 1e-4);
     } else $('a-range').hidden = true;
+    // a LUT in the config run backwards for a colour it can't make: the result is a best guess, say so
+    if (!err && ae && !aWarn && model.outsideLut(interp, out, ae)) aWarn = 'These values fall outside what a LUT in this config can make, so the result is a best guess.';
     setChip('a-warn', err ? err + ' Pick another colour profile or output.' : aWarn, 'warn');
 
     // the final file: a typed value whose result lands outside 0..1 gets clipped in the final file
@@ -845,10 +991,15 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       }
     }
     setChip('e-warn', eWarn, 'warn');
+    // values outside a colour space: offer the nearest colour that fits both (see fitInRange)
+    fitFrom = !err && ae && exp && (rangeWarn || eWarn) ? { interp, out, ae: ae.slice(), t: exp.map((v) => Math.min(Math.max(v, 0), 1)) } : null;
+    const fitBtn = ' <button class="link useClosest fitRange" type="button" title="Change the colour to the nearest one that fits both colour spaces">Fit in range</button>';
+    if (fitFrom && rangeWarn && !err) $('a-warn').insertAdjacentHTML('beforeend', fitBtn);
+    if (fitFrom && eWarn) $('e-warn').insertAdjacentHTML('beforeend', fitBtn);
     $('a-swatch').style.background = exp ? css(exp) : 'transparent';
 
     // double-check: run the numbers as you'd type them forward to the final file
-    let note = '', cls = '';
+    let note = '', cls = '', closest = null;
     if (toAe && ae && !err) {
       const typedHex = hexOf(model.final(interp, out, asTyped(inp, ae)));
       const exactHex = hexOf(model.final(interp, out, ae));
@@ -856,16 +1007,48 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
       if (typedHex === expHex) {
         note = '';
       } else if (exactHex === expHex) {
+        // the copy buttons hold as many decimals as it takes: say how many, and only promise what they hit
+        const copied = preciseFloats(ae), d = (copied[0].split('.')[1] || '').length;
+        const hits = hexOf(model.final(interp, out, copied.map(Number))) === expHex;
         note = floaty('a')
-          ? 'Rounded to 4 decimals these land on ' + typedHex + '. Copy the values to hit ' + expHex + ' exactly.'
-          : 'The 0–255 values land on ' + typedHex + '. Type the Float values (32-bit float) to hit ' + expHex + ' exactly.';
+          ? 'The 4 decimals shown land on ' + typedHex + '. ' + (hits ? 'Copy the values (' + d + ' decimals) to hit ' + expHex + ' exactly.' : 'Copied values land on ' + hexOf(model.final(interp, out, copied.map(Number))) + '.')
+          : 'The 0–255 values land on ' + typedHex + '. ' + (hits ? 'Copy the Float values (' + d + ' decimals, 32-bit float) to hit ' + expHex + '.' : 'The Float values land closer.');
         cls = 'info';
+      } else if (needsNegative) {
+        // reachable, but only with values below 0 (outside the colour space): say so, with the values
+        note = expHex + ' needs values below 0: ' + preciseFloats(needsNegative).join(', ') + '. Closest without: ' + exactHex + '.';
+        cls = 'info';
+        closest = exactHex;
       } else {
-        note = 'The ' + model.look(out) + ' view can\'t produce this colour exactly. The closest it gets is ' + exactHex + '.';
+        // nothing found: that's not proof it can't be done, so don't claim it
+        note = 'No values found for ' + expHex + ' through the ' + model.look(out) + ' view. Closest: ' + exactHex + '.';
         cls = 'warn';
+        closest = exactHex;
       }
     }
     setChip('a-chip', note, cls);
+    // a colour that can't be reached: offer to switch to the closest one that can. "Use" keeps these Input
+    // values (they make exactly that colour), rather than solving the closest hex again.
+    closestValues = closest ? ae.slice() : null;
+    if (closest) $('a-chip').insertAdjacentHTML('beforeend', ' <button class="link useClosest" type="button" data-hex="' + closest + '" title="Make ' + closest + ' the Output colour">Use ' + closest + '</button>');
+
+    // "Fit colours automatically" (settings): when the Output colour drives and can't be made inside both
+    // colour spaces, switch straight to the nearest colour that can (what Fit in range or Use #… would do),
+    // and say so. Values typed on the Input side are left as typed.
+    if (autoFit && toAe && ae && !err && (fitFrom || closest)) {
+      let x = null;
+      if (fitFrom) { try { x = fitInRange(interp, out, fitFrom.t, ae); } catch (e) { x = null; } }
+      if (!x && closest && Math.max(...outside(interp, out, ae)) <= 1e-6) x = ae.slice();
+      if (x) {
+        const to = hexOf(model.final(interp, out, x));
+        autoNote = to !== expHex ? { from: expHex, to } : null;
+        setColour('a', x, true); // draws again with the Input driving
+        return;
+      }
+    }
+    if (!toAe && autoNote && exp && hexOf(exp) === autoNote.to) {
+      setChip('a-chip', 'Fitted to ' + autoNote.to + ', the nearest colour inside both colour spaces (' + autoNote.from + ' isn\'t). Switch this off under the gear.', 'info');
+    }
 
     // header, roles, help text, render path
     let steps = [];
@@ -1016,6 +1199,50 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
   }
   // eyedropper for the whole screen: the app does it itself; Chrome and Edge have one built in
   const useHex = (hex) => { const v = hex && parseHex(hex); if (v) { setColour('e', v); remember(hexOf(v)); } };
+  // "Use #…" in the note: take the closest colour that can be reached as the new Output
+  $('a-chip').addEventListener('click', (e) => {
+    const b = e.target.closest('.useClosest');
+    if (!b || !closestValues) return;
+    setColour('a', closestValues); // the Input now drives: the Output becomes the closest colour
+    remember(b.dataset.hex);
+  });
+  // "Fit in range" on a range warning: the nearest colour inside both colour spaces
+  // one setting, two switches: the gear menu here and the app's right-click menu (which asks the page)
+  const setAutoFit = (on) => {
+    autoFit = !!on;
+    $('autoFit').checked = autoFit;
+    try { localStorage.setItem('astrolabe-autofit', autoFit ? '1' : '0'); } catch (err) {}
+    if (HOST) HOST.postMessage('autofit:' + (autoFit ? 1 : 0));
+    render(); // switched on: fit the colour now if it needs it
+  };
+  // settings: the explanation line under each dropdown (on unless switched off; kept on this computer)
+  let explainOn = true;
+  try { explainOn = localStorage.getItem('astrolabe-explain') !== '0'; } catch (e) {}
+  const applyExplain = () => { document.body.classList.toggle('noExplain', !explainOn); $('explainOn').checked = explainOn; };
+  applyExplain();
+  $('explainOn').addEventListener('change', (e) => {
+    explainOn = e.target.checked;
+    try { localStorage.setItem('astrolabe-explain', explainOn ? '1' : '0'); } catch (err) {}
+    applyExplain();
+  });
+  $('autoFit').checked = autoFit;
+  if (HOST) {
+    HOST.postMessage('autofit:' + (autoFit ? 1 : 0));
+    HOST.addEventListener('message', (e) => { if (e.data && e.data.type === 'autofit') setAutoFit(e.data.on); });
+  }
+  $('autoFit').addEventListener('change', (e) => setAutoFit(e.target.checked));
+  const fitClick = (e) => {
+    const b = e.target.closest('.fitRange');
+    if (!b || !fitFrom) return;
+    const { interp, out, ae, t } = fitFrom;
+    let x = null;
+    try { x = fitInRange(interp, out, t, ae); } catch (err) { x = null; }
+    if (!x) { b.replaceWith(document.createTextNode(' No colour inside both ranges was found nearby.')); return; }
+    setColour('a', x); // the Input now drives: in range, and the Output shows the colour it makes
+    try { remember(hexOf(model.final(interp, out, x))); } catch (err) {}
+  };
+  $('a-warn').addEventListener('click', fitClick);
+  $('e-warn').addEventListener('click', fitClick);
   if (HOST || window.EyeDropper) $('e-drop').hidden = false;
   if (HOST) HOST.addEventListener('message', (e) => { if (e.data && e.data.type === 'picked-color') useHex(e.data.hex); });
   $('e-drop').addEventListener('click', async () => {
@@ -1121,8 +1348,11 @@ button:focus-visible { outline: 2px solid var(--muted); outline-offset: 1px; }
         for (const k of Object.keys(store.mem)) if (!store.recent.includes(k) && k !== store.def) delete store.mem[k];
       }
       saveStore();
-      status(modelError ? '' : 'Using ' + m.name + ': ' + m.outputs.length + ' outputs, ' + cfg.spaces.length + ' colour spaces.');
-      $('cfgFolderBtn').hidden = true;
+      // A missing LUT file doesn't stop the config loading: it shows up once a pair of spaces needs it
+      // (modelError). In a browser, offer the folder picker then, so the LUT files can come along.
+      const lutMissing = !HOST && /isn.t next to the config/.test(modelError);
+      status(lutMissing ? modelError + ' Pick the config\'s folder so its LUT files come along.' : modelError ? '' : 'Using ' + m.name + ': ' + m.outputs.length + ' outputs, ' + cfg.spaces.length + ' colour spaces.');
+      $('cfgFolderBtn').hidden = !lutMissing;
     } catch (e) {
       const msg = e.message || String(e);
       const needFolder = !HOST && /isn.t next to the config/.test(msg);
