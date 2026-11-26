@@ -22,9 +22,9 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyTitle("ASTROLABE")]
 [assembly: AssemblyProduct("ASTROLABE")]
 [assembly: AssemblyDescription("Brand colour to the value you type in any OCIO colour profile")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyInformationalVersion("1.1")]
 
 static class Program
 {
